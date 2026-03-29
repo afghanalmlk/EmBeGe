@@ -33,6 +33,8 @@ CREATE TABLE barang (
     nama_barang VARCHAR(100) NOT NULL
 );
 
+
+
 -- Membuat tabel Menu
 CREATE TABLE menu (
     id_menu SERIAL PRIMARY KEY,
