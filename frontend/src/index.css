@@ -1,0 +1,17 @@
+/* Mengimpor Font Montserrat dari Google Fonts */
+@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;700;900&display=swap');
+
+@import "tailwindcss";
+
+@theme {
+  /* Mendaftarkan Palet Warna EmBeGe */
+  --color-embege-primary: #071e49;
+  --color-embege-green: #92d05d;
+  --color-embege-light: #b5e0ea;
+  --color-embege-gold: #d1b06c;
+}
+
+body {
+  background-color: #f8f9fa; 
+  color: #333333;
+}
