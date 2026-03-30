@@ -1,14 +1,19 @@
-// 1. Memanggil library yang dibutuhkan
 const express = require('express');
 const cors = require('cors');
+require('dotenv').config(); // Pastikan dotenv dipanggil di awal
 
-// 2. Membuat aplikasi Express
 const app = express();
-const port = 5000; // Menentukan 'nomor pintu' server
+const port = process.env.PORT || 5000;
 
-// 3. Mengaktifkan Middleware (penengah)
-app.use(cors()); // Mengizinkan frontend mengakses backend kita
-app.use(express.json()); // Membantu server membaca data yang dikirim dalam format JSON
+// Konfigurasi CORS yang lebih aman (Production-Ready)
+const corsOptions = {
+  origin: process.env.FRONTEND_URL || 'http://localhost:5173', // Sesuaikan URL frontend
+  credentials: true, // Mengizinkan cookie/header otorisasi
+  methods: ['GET', 'POST', 'PUT', 'DELETE'],
+};
+
+app.use(cors(corsOptions));
+app.use(express.json());
 
 // UPDATE 1
 // Memanggil pelayan rute auth

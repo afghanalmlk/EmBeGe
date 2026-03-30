@@ -36,36 +36,51 @@ const getAllPenerima = async (req, res) => {
 const tambahPenerima = async (req, res) => {
     try {
         const { nama_penerima, alamat, qty_porsi_besar, qty_porsi_kecil } = req.body;
+        
+        // Validasi input
+        if (!nama_penerima || nama_penerima.trim() === '') {
+            return res.status(400).json({ pesan: "Nama penerima tidak boleh kosong!" });
+        }
+
         const insert = await pool.query(
             'INSERT INTO penerima_manfaat (nama_penerima, alamat, qty_porsi_besar, qty_porsi_kecil, created_by) VALUES ($1, $2, $3, $4, $5) RETURNING *',
-            [nama_penerima, alamat, qty_porsi_besar, qty_porsi_kecil, req.user.id_user]
+            [nama_penerima.trim(), alamat, qty_porsi_besar || 0, qty_porsi_kecil || 0, req.user.id_user]
         );
-        res.status(201).json({ pesan: "Penerima ditambahkan", data: insert.rows[0] });
-    } catch (error) { res.status(500).json({ pesan: "Error server" }); }
-};
-
-const validasiAksesPenerima = async (id_penerima, reqUser) => {
-    if (reqUser.id_role === 1) return true;
-    const cek = await pool.query(`SELECT u.id_sppg FROM penerima_manfaat p JOIN users u ON p.created_by = u.id_user WHERE p.id_penerima = $1`, [id_penerima]);
-    return cek.rows.length > 0 && cek.rows[0].id_sppg === reqUser.id_sppg;
+        res.status(201).json({ pesan: "Data Penerima berhasil ditambahkan", data: insert.rows[0] });
+    } catch (error) { 
+        console.error("Error Tambah Penerima:", error.message);
+        res.status(500).json({ pesan: "Terjadi kesalahan server saat menyimpan data." }); 
+    }
 };
 
 const editPenerima = async (req, res) => {
     try {
-        if (!(await validasiAksesPenerima(req.params.id, req.user))) return res.status(403).json({ pesan: "Akses ditolak." });
         const { nama_penerima, alamat, qty_porsi_besar, qty_porsi_kecil } = req.body;
-        await pool.query('UPDATE penerima_manfaat SET nama_penerima=$1, alamat=$2, qty_porsi_besar=$3, qty_porsi_kecil=$4 WHERE id_penerima=$5', 
-            [nama_penerima, alamat, qty_porsi_besar, qty_porsi_kecil, req.params.id]);
-        res.json({ pesan: "Data penerima diperbarui" });
-    } catch (error) { res.status(500).json({ pesan: "Error server" }); }
+        
+        if (!nama_penerima || nama_penerima.trim() === '') {
+            return res.status(400).json({ pesan: "Nama penerima tidak boleh kosong!" });
+        }
+
+        const update = await pool.query(
+            'UPDATE penerima_manfaat SET nama_penerima=$1, alamat=$2, qty_porsi_besar=$3, qty_porsi_kecil=$4 WHERE id_penerima=$5 RETURNING *', 
+            [nama_penerima.trim(), alamat, qty_porsi_besar || 0, qty_porsi_kecil || 0, req.params.id]
+        );
+        
+        res.json({ pesan: "Data penerima berhasil diperbarui", data: update.rows[0] });
+    } catch (error) { 
+        console.error("Error Edit Penerima:", error.message);
+        res.status(500).json({ pesan: "Terjadi kesalahan server saat memperbarui data." }); 
+    }
 };
 
 const hapusPenerima = async (req, res) => {
     try {
-        if (!(await validasiAksesPenerima(req.params.id, req.user))) return res.status(403).json({ pesan: "Akses ditolak." });
         await pool.query('DELETE FROM penerima_manfaat WHERE id_penerima = $1', [req.params.id]);
-        res.json({ pesan: "Data penerima dihapus" });
-    } catch (error) { res.status(500).json({ pesan: "Error server" }); }
+        res.json({ pesan: "Data penerima berhasil dihapus" });
+    } catch (error) { 
+        console.error("Error Hapus Penerima:", error.message);
+        res.status(500).json({ pesan: "Terjadi kesalahan server saat menghapus data." }); 
+    }
 };
 
 module.exports = { getAllPenerima, tambahPenerima, editPenerima, hapusPenerima };

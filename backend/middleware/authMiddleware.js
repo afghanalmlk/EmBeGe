@@ -10,12 +10,12 @@ const verifyToken = (req, res, next) => {
         return res.status(401).json({ pesan: "Akses ditolak. Anda harus login terlebih dahulu!" });
     }
 
-    // 2. Mengambil tokennya saja (menghilangkan kata 'Bearer ')
-    const token = authHeader.split(' ')[1];
+    // Ganti bagian ekstraksi token menjadi lebih aman:
+    const token = authHeader.startsWith('Bearer ') ? authHeader.split(' ')[1] : authHeader;
 
     if (!token) {
         return res.status(401).json({ pesan: "Format token salah!" });
-    }
+    }   
 
     try {
         // 3. Memeriksa keaslian token dengan kunci rahasia kita

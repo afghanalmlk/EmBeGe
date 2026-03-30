@@ -6,8 +6,7 @@ const Layout = ({ children, title }) => {
   const role = localStorage.getItem('role');
 
   const handleLogout = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('role');
+    localStorage.clear(); // <-- Jauh lebih aman dan efektif
     navigate('/login');
   };
 

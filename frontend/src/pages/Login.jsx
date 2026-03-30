@@ -1,35 +1,38 @@
+// frontend/src/pages/Login.jsx
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import api from '../api/axiosInstance'; // Import axios instance
 
 const Login = () => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
   const handleLogin = async (e) => {
     e.preventDefault();
     setError('');
+    setLoading(true);
 
     try {
-      const response = await fetch('http://localhost:5000/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password })
-      });
+      // Tidak perlu lagi menulis full URL atau header manual
+      const response = await api.post('/auth/login', { username, password });
+      
+      const { token, user, pesan } = response.data;
 
-      const data = await response.json();
+      localStorage.setItem('token', token);
+      localStorage.setItem('role', user.id_role); // Simpan role untuk otorisasi navigasi
+      localStorage.setItem('username', data.user.username); 
 
-      if (response.ok) {
-        localStorage.setItem('token', data.token);
-        localStorage.setItem('role', data.user.id_role);
-        alert(`Selamat datang, ${data.user.username}!`);
-        navigate('/dashboard'); // Pindah ke halaman dashboard
-      } else {
-        setError(data.pesan || 'Login gagal.');
-      }
+      alert(`Selamat datang, ${user.username}!`);
+      navigate('/dashboard');
+      
     } catch (err) {
-      setError('Gagal terhubung ke server.');
+      // Handle error dari response backend atau network
+      setError(err.response?.data?.pesan || 'Gagal terhubung ke server.');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -52,6 +55,7 @@ const Login = () => {
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
+              disabled={loading}
               required 
             />
           </div>
@@ -62,14 +66,16 @@ const Login = () => {
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
+              disabled={loading}
               required 
             />
           </div>
           <button 
             type="submit" 
-            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-md transition duration-200"
+            disabled={loading}
+            className={`w-full text-white font-bold py-2 px-4 rounded-md transition duration-200 ${loading ? 'bg-blue-400' : 'bg-blue-600 hover:bg-blue-700'}`}
           >
-            Masuk
+            {loading ? 'Memproses...' : 'Masuk'}
           </button>
         </form>
       </div>

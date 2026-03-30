@@ -3,75 +3,106 @@ const jwt = require('jsonwebtoken');
 const pool = require('../db');
 
 const register = async (req, res) => {
-    try {
-        // 1. Menangkap data formulir (sekarang sudah lengkap dengan hierarki wilayah)
-        const { 
-            username, password, email, no_telp, 
-            nama_sppg, kelurahan_desa, kecamatan, kabupaten_kota, provinsi, alamat 
-        } = req.body;
+    // Validasi Input Dasar (Mencegah payload kosong/tidak lengkap)
+    const { 
+        username, password, email, no_telp, 
+        nama_sppg, kelurahan_desa, kecamatan, kabupaten_kota, provinsi, alamat 
+    } = req.body;
 
-        // 2. Mengacak password
+    if (!username || !password || !email || !nama_sppg) {
+        return res.status(400).json({ pesan: "Data wajib (Username, Password, Email, Nama SPPG) tidak boleh kosong!" });
+    }
+
+    const client = await pool.connect();
+
+    try {
+        // Cek duplikasi Username ATAU Email
+        const checkUser = await client.query(
+            'SELECT username, email FROM users WHERE username = $1 OR email = $2', 
+            [username, email]
+        );
+        
+        if (checkUser.rows.length > 0) {
+            const isEmail = checkUser.rows.find(u => u.email === email);
+            return res.status(400).json({ 
+                pesan: isEmail ? "Email sudah terdaftar!" : "Username sudah digunakan!" 
+            });
+        }
+
         const saltRounds = 10;
         const hashedPassword = await bcrypt.hash(password, saltRounds);
 
-        // 3. Menyimpan data SPPG dengan kolom wilayah yang baru
-        const sppgQuery = await pool.query(
-            'INSERT INTO sppg (nama_sppg, kelurahan_desa, kecamatan, kabupaten_kota, provinsi, alamat) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id_sppg',
+        // ==========================================
+        // TRANSAKSI DIMULAI
+        // ==========================================
+        await client.query('BEGIN');
+
+        // 1. Simpan Data SPPG
+        const sppgQuery = await client.query(
+            'INSERT INTO sppg (nama_sppg, kelurahan_desa, kecamatan, kabupaten_kota, provinsi, alamat) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id_sppg, nama_sppg',
             [nama_sppg, kelurahan_desa, kecamatan, kabupaten_kota, provinsi, alamat]
         );
         const id_sppg_baru = sppgQuery.rows[0].id_sppg;
 
-        // 4. Menyimpan data User baru.
-        // PENTING: Sekarang id_role untuk KaSPPG adalah 2 (karena 1 adalah Superadmin)
-        const userQuery = await pool.query(
+        // 2. Simpan Data User (Role 2 = KaSPPG)
+        const userQuery = await client.query(
             'INSERT INTO users (id_role, id_sppg, username, password, email, no_telp) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id_user, username',
             [2, id_sppg_baru, username, hashedPassword, email, no_telp]
         );
 
-        // 5. Mengirim jawaban sukses ke layar pengguna
+        await client.query('COMMIT');
+
         res.status(201).json({
             pesan: "Registrasi SPPG dan KaSPPG berhasil!",
-            user: userQuery.rows[0]
+            user: {
+                id_user: userQuery.rows[0].id_user,
+                username: userQuery.rows[0].username,
+                nama_sppg: sppgQuery.rows[0].nama_sppg
+            }
         });
 
     } catch (error) {
-        console.error("Error saat registrasi:", error.message);
+        await client.query('ROLLBACK'); 
+        console.error("Error registrasi:", error.message);
         res.status(500).json({ pesan: "Terjadi kesalahan pada server saat registrasi" });
+    } finally {
+        client.release();
     }
 };
 
-// UPDATE 1
 const login = async (req, res) => {
     try {
         const { username, password } = req.body;
 
-        // 1. Mencari user di database berdasarkan username
-        const userQuery = await pool.query('SELECT * FROM users WHERE username = $1', [username]);
+        if (!username || !password) {
+            return res.status(400).json({ pesan: "Username dan password wajib diisi!" });
+        }
+
+        // Ambil data user beserta nama SPPG-nya (BERGUNA UNTUK UI FRONTEND)
+        const userQuery = await pool.query(`
+            SELECT u.*, s.nama_sppg 
+            FROM users u 
+            LEFT JOIN sppg s ON u.id_sppg = s.id_sppg 
+            WHERE u.username = $1
+        `, [username]);
         
-        // Jika user tidak ditemukan
         if (userQuery.rows.length === 0) {
             return res.status(401).json({ pesan: "Username atau password salah!" });
         }
 
         const user = userQuery.rows[0];
-
-        // 2. Mencocokkan password yang diketik dengan password di database
         const isPasswordValid = await bcrypt.compare(password, user.password);
         
-        // Jika password salah
         if (!isPasswordValid) {
             return res.status(401).json({ pesan: "Username atau password salah!" });
         }
 
-        // 3. Jika benar, buat Token (KTP Digital)
-        // Kita titipkan id_user, id_role, dan id_sppg di dalam token ini
         const token = jwt.sign(
             { id_user: user.id_user, id_role: user.id_role, id_sppg: user.id_sppg },
-            process.env.JWT_SECRET, // Menggunakan kunci rahasia dari .env
-            { expiresIn: '1d' } // Token ini akan hangus/kadaluarsa dalam 1 hari
+            process.env.JWT_SECRET,
+            { expiresIn: '1d' }
         );
 
-        // 4. Kirim jawaban sukses beserta tokennya
         res.json({
             pesan: "Login berhasil!",
             token: token,
@@ -79,15 +110,15 @@ const login = async (req, res) => {
                 id_user: user.id_user,
                 username: user.username,
                 id_role: user.id_role,
-                id_sppg: user.id_sppg
+                id_sppg: user.id_sppg,
+                nama_sppg: user.nama_sppg // Kirim nama SPPG untuk ditampilkan di Sidebar/Layout
             }
         });
 
     } catch (error) {
-        console.error("Error saat login:", error.message);
+        console.error("Error login:", error.message);
         res.status(500).json({ pesan: "Terjadi kesalahan pada server saat login" });
     }
 };
 
-// Jangan lupa ekspor juga fungsi login-nya!
 module.exports = { register, login };

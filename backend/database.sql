@@ -162,3 +162,19 @@ CREATE TABLE gizi (
     karbo DECIMAL,
     serat DECIMAL
 );
+
+-- Perbaikan untuk Detail Menu
+ALTER TABLE detail_menu DROP CONSTRAINT detail_menu_id_menu_fkey;
+ALTER TABLE detail_menu ADD CONSTRAINT detail_menu_id_menu_fkey FOREIGN KEY (id_menu) REFERENCES menu(id_menu) ON DELETE CASCADE;
+
+-- Perbaikan untuk Detail PO
+ALTER TABLE detail_po DROP CONSTRAINT detail_po_id_po_fkey;
+ALTER TABLE detail_po ADD CONSTRAINT detail_po_id_po_fkey FOREIGN KEY (id_po) REFERENCES po(id_po) ON DELETE CASCADE;
+
+-- Perbaikan untuk Histori PO
+ALTER TABLE histori_po DROP CONSTRAINT histori_po_id_detail_po_fkey;
+ALTER TABLE histori_po ADD CONSTRAINT histori_po_id_detail_po_fkey FOREIGN KEY (id_detail_po) REFERENCES detail_po(id_detail_po) ON DELETE CASCADE;
+
+-- Perbaikan untuk Detail Invoice
+ALTER TABLE detail_invoice DROP CONSTRAINT detail_invoice_id_invoice_fkey;
+ALTER TABLE detail_invoice ADD CONSTRAINT detail_invoice_id_invoice_fkey FOREIGN KEY (id_invoice) REFERENCES invoice(id_invoice) ON DELETE CASCADE;

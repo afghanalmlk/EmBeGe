@@ -2,13 +2,16 @@ const express = require('express');
 const router = express.Router();
 
 const { verifyToken } = require('../middleware/authMiddleware');
-const { getPO, tambahPO, updateStatusPO , hapusPO} = require('../controllers/poController');
+// Panggil middleware otorisasi
+const { authorizeSPPG, forbidAhliGizi } = require('../middleware/roleMiddleware');
+const { getPO, tambahPO, updateStatusPO, hapusPO } = require('../controllers/poController');
 
+// GET: Semua role (termasuk Ahli Gizi) boleh melihat
 router.get('/', verifyToken, getPO);
-router.post('/', verifyToken, tambahPO);
-router.put('/:id/status', verifyToken, updateStatusPO);
-// delete (Superadmin, Akuntan, KaSPPG dalam SPPG sama)
-// po bisa di delete jika status masih pending
-router.delete('/:id', verifyToken, hapusPO);
+
+// POST, PUT, DELETE: Blokir Ahli Gizi & Pastikan kepemilikan data (SPPG)
+router.post('/', verifyToken, forbidAhliGizi, tambahPO);
+router.put('/:id/status', verifyToken, forbidAhliGizi, authorizeSPPG('po', 'id_po'), updateStatusPO);
+router.delete('/:id', verifyToken, forbidAhliGizi, authorizeSPPG('po', 'id_po'), hapusPO);
 
 module.exports = router;
