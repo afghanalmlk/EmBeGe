@@ -13,14 +13,33 @@ const getPO = async (req, res) => {
                 m.nama_menu, 
                 u.username AS pembuat,
                 SUM(dp.qty_barang * dp.harga_barang) AS total_harga,
+                -- 1. Mengambil array rincian barang
                 json_agg(
                     json_build_object(
                         'nama_barang', b.nama_barang,
                         'qty', dp.qty_barang,
+                        'satuan', dp.satuan, -- TAMBAHKAN INI
                         'harga_satuan', dp.harga_barang,
                         'subtotal', (dp.qty_barang * dp.harga_barang)
                     )
-                ) AS rincian_barang
+                ) AS rincian_barang,
+                -- 2. Mengambil histori aksi (unik per PO)
+                (
+                    SELECT json_agg(
+                        json_build_object(
+                            'action', hp.action, 
+                            'action_at', hp.action_at, 
+                            'action_by', u2.username
+                        ) ORDER BY hp.action_at DESC
+                    )
+                    FROM (
+                        SELECT DISTINCT action, action_at, action_by
+                        FROM histori_po hp
+                        JOIN detail_po dp_hist ON hp.id_detail_po = dp_hist.id_detail_po
+                        WHERE dp_hist.id_po = p.id_po
+                    ) hp
+                    JOIN users u2 ON hp.action_by = u2.id_user
+                ) AS histori
             FROM po p
             JOIN jadwal_menu j ON p.id_jadwal_menu = j.id_jadwal
             JOIN menu m ON j.id_menu = m.id_menu
@@ -84,13 +103,17 @@ const tambahPO = async (req, res) => {
 
         for (const item of daftar_barang) {
             const detailQuery = await client.query(
-                `INSERT INTO detail_po (id_po, id_barang, qty_barang, harga_barang) VALUES ($1, $2, $3, $4) RETURNING id_detail_po`,
-                [id_po_baru, item.id_barang, item.qty_barang, item.harga_barang]
+                // TAMBAHKAN kolom satuan di sini
+                `INSERT INTO detail_po (id_po, id_barang, qty_barang, harga_barang, satuan) 
+                 VALUES ($1, $2, $3, $4, $5) RETURNING id_detail_po`,
+                [id_po_baru, item.id_barang, item.qty_barang, item.harga_barang, item.satuan]
             );
             
+            const id_detail_po_baru = detailQuery.rows[0].id_detail_po;
+
             await client.query(
                 `INSERT INTO histori_po (id_detail_po, action, action_by) VALUES ($1, $2, $3)`,
-                [detailQuery.rows[0].id_detail_po, 'PO Dibuat (Pending)', id_user]
+                [id_detail_po_baru, 'PO Dibuat (Pending)', id_user]
             );
         }
 

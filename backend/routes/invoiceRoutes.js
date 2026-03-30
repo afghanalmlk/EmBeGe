@@ -4,8 +4,7 @@ const router = express.Router();
 const { verifyToken } = require('../middleware/authMiddleware');
 // Panggil middleware pengaman
 const { authorizeSPPG, forbidAhliGizi } = require('../middleware/roleMiddleware');
-const { getInvoice, tambahInvoice, editInvoice, hapusInvoice } = require('../controllers/invoiceController');
-
+const { getInvoice, tambahInvoice, editInvoice, hapusInvoice, updateStatusInvoice } = require('../controllers/invoiceController');
 // GET: Semua role boleh melihat Invoice (sesuai SPPG masing-masing)
 router.get('/', verifyToken, getInvoice);
 
@@ -15,5 +14,7 @@ router.get('/', verifyToken, getInvoice);
 router.post('/', verifyToken, forbidAhliGizi, tambahInvoice);
 router.put('/:id', verifyToken, forbidAhliGizi, authorizeSPPG('invoice', 'id_invoice'), editInvoice);
 router.delete('/:id', verifyToken, forbidAhliGizi, authorizeSPPG('invoice', 'id_invoice'), hapusInvoice);
+// Rute untuk ubah status (Pastikan hanya Superadmin & KaSPPG)
+router.put('/:id/status', verifyToken, authorizeSPPG('invoice', 'id_invoice'), updateStatusInvoice);
 
 module.exports = router;

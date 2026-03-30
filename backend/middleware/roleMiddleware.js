@@ -70,6 +70,14 @@ const forbidGiziAndAkuntan = (req, res, next) => {
     next();
 };
 
+const forbidAhliGizi = (req, res, next) => {
+    // Role 3 = Ahli Gizi
+    if (req.user.id_role === 3) {
+        return res.status(403).json({ pesan: "Akses ditolak. Ahli Gizi hanya diperbolehkan melihat data PO." });
+    }
+    next();
+};
+
 // 2. Satpam untuk memvalidasi Relasi Gizi -> Menu -> Users -> SPPG (Untuk Edit & Hapus)
 const authorizeGizi = async (req, res, next) => {
     try {
@@ -114,5 +122,5 @@ const authorizeMenuParent = async (req, res, next) => {
     }
 };
 
-module.exports = { authorizeSPPG, requireSuperadmin, forbidAkuntan, authorizeGizi, authorizeMenuParent, forbidGiziAndAkuntan };
+module.exports = { authorizeSPPG, requireSuperadmin, forbidAkuntan, authorizeGizi, authorizeMenuParent, forbidGiziAndAkuntan, forbidAhliGizi };
 

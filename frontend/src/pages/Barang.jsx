@@ -1,68 +1,52 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import api from '../api/axiosInstance'; // Import axios instance
 import Layout from '../components/Layout';
 
 const Barang = () => {
   const [barangList, setBarangList] = useState([]);
   const [namaBarang, setNamaBarang] = useState('');
+  
+  // State Management
   const [isLoading, setIsLoading] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
   
-  const navigate = useNavigate();
   // Mengambil Role dari penyimpanan untuk mengatur hak akses UI
+  // Note: Tidak perlu panggil token lagi, axiosInstance sudah mengurusnya!
   const role = localStorage.getItem('role'); 
-  const token = localStorage.getItem('token');
 
   // Fungsi mengambil daftar barang
   const fetchBarang = async () => {
+    setIsLoading(true);
+    setError('');
     try {
-      const response = await fetch('http://localhost:5000/barang', {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      const data = await response.json();
-
-      if (response.ok) {
-        setBarangList(data.data);
-      } else {
-        setError(data.pesan);
-        if (response.status === 401) navigate('/login');
-      }
+      const response = await api.get('/barang');
+      setBarangList(response.data.data);
     } catch (err) {
-      setError('Gagal terhubung ke server.');
+      setError(err.response?.data?.pesan || 'Gagal terhubung ke server saat mengambil data barang.');
     } finally {
       setIsLoading(false);
     }
   };
 
   useEffect(() => {
-    if (!token) navigate('/login');
-    else fetchBarang();
-  }, [navigate, token]);
+    fetchBarang();
+  }, []);
 
   // Fungsi menambah barang baru (Hanya Superadmin)
   const handleTambahBarang = async (e) => {
     e.preventDefault();
     if (!namaBarang.trim()) return;
 
+    setIsSubmitting(true);
     try {
-      const response = await fetch('http://localhost:5000/barang', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({ nama_barang: namaBarang })
-      });
-      
-      const data = await response.json();
-      if (response.ok) {
-        setNamaBarang(''); // Kosongkan input
-        fetchBarang(); // Refresh tabel secara otomatis
-      } else {
-        alert(data.pesan);
-      }
+      await api.post('/barang', { nama_barang: namaBarang });
+      setNamaBarang(''); // Kosongkan input
+      fetchBarang(); // Refresh tabel secara otomatis
     } catch (err) {
-      alert('Gagal menambah barang.');
+      alert(err.response?.data?.pesan || 'Gagal menambah barang.');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -72,20 +56,11 @@ const Barang = () => {
     if (!konfirmasi) return;
 
     try {
-      const response = await fetch(`http://localhost:5000/barang/${id_barang}`, {
-        method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      
-      const data = await response.json();
-      if (response.ok) {
-        // Hapus dari state tanpa perlu refresh halaman
-        setBarangList(barangList.filter(b => b.id_barang !== id_barang));
-      } else {
-        alert(data.pesan);
-      }
+      await api.delete(`/barang/${id_barang}`);
+      // Hapus dari state tanpa perlu refresh halaman penuh
+      setBarangList(barangList.filter(b => b.id_barang !== id_barang));
     } catch (err) {
-      alert('Gagal menghapus barang. Pastikan barang tidak sedang terpakai di Menu/PO.');
+      alert(err.response?.data?.pesan || 'Gagal menghapus barang. Pastikan barang tidak sedang terpakai di Menu/PO.');
     }
   };
 
@@ -96,7 +71,7 @@ const Barang = () => {
         {/* Pesan Error Global */}
         {error && <div className="p-4 bg-red-50 text-red-600 border border-red-100 rounded-xl font-medium">{error}</div>}
 
-        {/* FORM TAMBAH BARANG (Disembunyikan jika bukan Superadmin) */}
+        {/* FORM TAMBAH BARANG (Disembunyikan jika bukan Superadmin Role 1) */}
         {role === '1' && (
           <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
             <h3 className="text-lg font-bold text-gray-800 mb-4">Tambah Barang Baru</h3>
@@ -104,16 +79,19 @@ const Barang = () => {
               <input 
                 type="text" 
                 placeholder="Masukkan nama bahan baku (Contoh: Bawang Merah)" 
-                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
                 value={namaBarang}
                 onChange={(e) => setNamaBarang(e.target.value)}
+                disabled={isSubmitting}
                 required
               />
               <button 
                 type="submit" 
-                className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded-lg transition duration-200 shadow-sm"
+                disabled={isSubmitting}
+                className={`text-white font-bold py-2 px-6 rounded-lg transition duration-200 shadow-sm
+                  ${isSubmitting ? 'bg-blue-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'}`}
               >
-                + Simpan Barang
+                {isSubmitting ? 'Menyimpan...' : '+ Simpan Barang'}
               </button>
             </form>
           </div>

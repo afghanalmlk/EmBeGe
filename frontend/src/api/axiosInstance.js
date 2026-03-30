@@ -1,34 +1,44 @@
 // frontend/src/api/axiosInstance.js
 import axios from 'axios';
 
+// Membuat instance axios dengan konfigurasi dasar
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL,
+  // Mengambil URL dari .env (Vite menggunakan import.meta.env)
+  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:5000', 
   headers: {
     'Content-Type': 'application/json',
   },
 });
 
-// Request Interceptor: Otomatis menyisipkan token ke setiap request
+// REQUEST INTERCEPTOR: Dijalankan SEBELUM request dikirim ke backend
 api.interceptors.request.use(
   (config) => {
+    // Ambil token dari brankas (localStorage)
     const token = localStorage.getItem('token');
+    
+    // Jika token ada, selipkan di header Authorization
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
     return config;
   },
-  (error) => Promise.reject(error)
+  (error) => {
+    return Promise.reject(error);
+  }
 );
 
-// Response Interceptor: Handle global error (misal token expired/401)
+// RESPONSE INTERCEPTOR: Dijalankan SETELAH menerima balasan dari backend
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    return response;
+  },
   (error) => {
+    // Jika backend membalas dengan status 401 (Unauthorized / Token Kadaluarsa)
     if (error.response && error.response.status === 401) {
-      // Auto logout jika token tidak valid/expired
-      localStorage.removeItem('token');
-      localStorage.removeItem('role');
-      window.location.href = '/login'; 
+      // Bersihkan semua sisa data login di browser
+      localStorage.clear();
+      // Tendang paksa user kembali ke halaman login
+      window.location.href = '/login';
     }
     return Promise.reject(error);
   }

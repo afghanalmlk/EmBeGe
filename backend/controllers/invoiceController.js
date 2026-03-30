@@ -7,115 +7,76 @@ const getInvoice = async (req, res) => {
 
         let queryStr = `
             SELECT 
-                i.id_invoice, 
-                i.tanggal_invoice, 
-                i.supplier, 
-                p.id_po, 
+                i.id_invoice, i.tanggal_invoice, i.supplier, i.id_po, i.status_invoice,
                 u.username AS pembuat,
-                SUM(di.harga_fix * di.qty) AS total_tagihan,
+                COALESCE(SUM(di.harga_fix * di.qty), 0) AS total_tagihan,
                 json_agg(
                     json_build_object(
-                        'id_barang', b.id_barang,
                         'nama_barang', b.nama_barang,
                         'qty', di.qty,
                         'satuan', di.satuan,
                         'harga_satuan', di.harga_fix,
                         'subtotal', (di.qty * di.harga_fix)
                     )
-                ) AS rincian_tagihan
+                ) FILTER (WHERE di.id_detail_invoice IS NOT NULL) AS rincian_tagihan
             FROM invoice i
-            JOIN po p ON i.id_po = p.id_po
             JOIN users u ON i.created_by = u.id_user
-            JOIN detail_invoice di ON i.id_invoice = di.id_invoice
-            LEFT JOIN barang b ON di.id_barang = b.id_barang
+            LEFT JOIN detail_invoice di ON i.id_invoice = di.id_invoice
+            LEFT JOIN barang b ON di.id_barang = b.id_barang -- Sekarang JOIN aman karena kolom id_barang sudah ada
         `;
 
-        let invQuery;
-
-        if (role_id === 1) {
-            // Superadmin melihat semua invoice
-            queryStr += ` GROUP BY i.id_invoice, p.id_po, u.username ORDER BY i.tanggal_invoice DESC`;
-            invQuery = await pool.query(queryStr);
-        } else {
-            // Pegawai hanya melihat invoice dari SPPG-nya sendiri
-            queryStr += ` WHERE u.id_sppg = $1 GROUP BY i.id_invoice, p.id_po, u.username ORDER BY i.tanggal_invoice DESC`;
-            invQuery = await pool.query(queryStr, [sppg_id]);
+        let queryParams = [];
+        if (role_id !== 1) {
+            queryStr += ` WHERE u.id_sppg = $1`;
+            queryParams.push(sppg_id);
         }
 
-        res.status(200).json({
-            pesan: "Berhasil mengambil daftar Invoice",
-            data: invQuery.rows
-        });
+        queryStr += ` GROUP BY i.id_invoice, u.username ORDER BY i.tanggal_invoice DESC`;
+
+        const invQuery = await pool.query(queryStr, queryParams);
+        res.status(200).json({ data: invQuery.rows });
     } catch (error) {
-        console.error("Error saat mengambil daftar Invoice:", error.message);
-        res.status(500).json({ pesan: "Terjadi kesalahan pada server saat mengambil data Invoice." });
+        console.error("Backend Error Invoice:", error.message);
+        res.status(500).json({ pesan: "Gagal mengambil data invoice." });
     }
 };
 
 const tambahInvoice = async (req, res) => {
     const client = await pool.connect();
-
     try {
         const { id_po, tanggal_invoice, supplier, rincian_invoice } = req.body;
-        // rincian_invoice berupa array: [{ id_barang, harga_fix, satuan, qty }]
         const id_user = req.user.id_user;
 
-        // Validasi Dasar
-        if (!id_po || !tanggal_invoice || !rincian_invoice || rincian_invoice.length === 0) {
-            return res.status(400).json({ pesan: "Data Invoice belum lengkap!" });
+        if (!id_po || !rincian_invoice || rincian_invoice.length === 0) {
+            return res.status(400).json({ pesan: "Pilih minimal satu barang untuk di-invoice!" });
         }
 
         await client.query('BEGIN');
 
-        // Proteksi Tambahan: Pastikan PO tersebut milik SPPG yang sama
-        if (req.user.id_role !== 1) {
-            const cekPO = await client.query(
-                `SELECT u.id_sppg FROM po p JOIN users u ON p.created_by = u.id_user WHERE p.id_po = $1`, 
-                [id_po]
-            );
-            if (cekPO.rows.length === 0 || cekPO.rows[0].id_sppg !== req.user.id_sppg) {
-                await client.query('ROLLBACK');
-                return res.status(403).json({ pesan: "PO tidak valid atau bukan milik SPPG Anda." });
-            }
-        }
-
-        // 1. Memasukkan ke tabel Invoice (Kepala Tagihan)
+        // 1. Simpan Kepala Invoice
         const invQuery = await client.query(
-            `INSERT INTO invoice (id_po, tanggal_invoice, supplier, created_by) 
-             VALUES ($1, $2, $3, $4) RETURNING id_invoice`,
+            `INSERT INTO invoice (id_po, tanggal_invoice, supplier, created_by, status_invoice) 
+             VALUES ($1, $2, $3, $4, 'Pending') RETURNING id_invoice`,
             [id_po, tanggal_invoice, supplier, id_user]
         );
         const id_invoice_baru = invQuery.rows[0].id_invoice;
 
-        // 2. Memasukkan rincian barang riil ke detail_invoice (SEKARANG MENGGUNAKAN id_barang)
+        // 2. Simpan Detail Invoice (Hanya barang yang dicentang)
         for (const item of rincian_invoice) {
+            // item berisi: { id_barang, harga_fix, qty, satuan }
             await client.query(
-                `INSERT INTO detail_invoice (id_invoice, id_barang, harga_fix, satuan, qty) 
+                `INSERT INTO detail_invoice (id_invoice, id_barang, harga_fix, qty, satuan) 
                  VALUES ($1, $2, $3, $4, $5)`,
-                [id_invoice_baru, item.id_barang, item.harga_fix, item.satuan, item.qty]
-            );
-        }
-
-        // 3. Catat di histori_po
-        const detailPoQuery = await client.query('SELECT id_detail_po FROM detail_po WHERE id_po = $1 LIMIT 1', [id_po]);
-        if (detailPoQuery.rows.length > 0) {
-            await client.query(
-                `INSERT INTO histori_po (id_detail_po, action, action_by) VALUES ($1, $2, $3)`,
-                [detailPoQuery.rows[0].id_detail_po, `Invoice diterbitkan oleh Supplier: ${supplier}`, id_user]
+                [id_invoice_baru, item.id_barang, item.harga_fix, item.qty, item.satuan]
             );
         }
 
         await client.query('COMMIT');
-
-        res.status(201).json({
-            pesan: "Data Invoice berhasil dicatat ke dalam sistem!",
-            id_invoice: id_invoice_baru
-        });
-
+        res.status(201).json({ pesan: "Invoice berhasil dibuat berdasarkan referensi PO!", id_invoice: id_invoice_baru });
     } catch (error) {
         await client.query('ROLLBACK');
-        console.error("Error saat mencatat Invoice:", error.message);
-        res.status(500).json({ pesan: "Terjadi kesalahan sistem, transaksi Invoice dibatalkan." });
+        console.error("Error Simpan Invoice:", error.message);
+        res.status(500).json({ pesan: "Gagal menyimpan invoice." });
     } finally {
         client.release();
     }
@@ -150,4 +111,17 @@ const hapusInvoice = async (req, res) => {
     }
 };
 
-module.exports = { getInvoice, tambahInvoice, editInvoice, hapusInvoice };
+const updateStatusInvoice = async (req, res) => {
+    try {
+        const { status_invoice } = req.body;
+        if (!status_invoice) return res.status(400).json({ pesan: "Status tidak boleh kosong." });
+        
+        await pool.query('UPDATE invoice SET status_invoice = $1 WHERE id_invoice = $2', [status_invoice, req.params.id]);
+        res.status(200).json({ pesan: `Status Invoice berhasil diubah menjadi '${status_invoice}'` });
+    } catch (error) {
+        res.status(500).json({ pesan: "Terjadi kesalahan sistem saat memperbarui status invoice." });
+    }
+};
+
+// Jangan lupa update exports-nya:
+module.exports = { getInvoice, tambahInvoice, editInvoice, hapusInvoice, updateStatusInvoice };

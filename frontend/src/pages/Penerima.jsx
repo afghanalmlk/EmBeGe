@@ -1,233 +1,198 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import api from '../api/axiosInstance';
 import Layout from '../components/Layout';
 
 const Penerima = () => {
   const [penerimaList, setPenerimaList] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [loading, setLoading] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
-  
-  // State untuk Form Tambah
-  const [namaPenerima, setNamaPenerima] = useState('');
-  const [alamat, setAlamat] = useState('');
-  const [porsiBesar, setPorsiBesar] = useState(0);
-  const [porsiKecil, setPorsiKecil] = useState(0);
 
-  const navigate = useNavigate();
-  const role = localStorage.getItem('role'); 
-  const token = localStorage.getItem('token');
+  // Form State
+  const [editId, setEditId] = useState(null); // Jika null berarti mode Tambah, jika ada ID berarti mode Edit
+  const [formData, setFormData] = useState({
+    nama_penerima: '',
+    alamat: '',
+    qty_porsi_besar: '',
+    qty_porsi_kecil: ''
+  });
+
+  const role = localStorage.getItem('role');
+  // Hanya Superadmin (1) dan KaSPPG (2) yang boleh Tambah/Edit/Hapus
+  const isAuthorized = role === '1' || role === '2';
 
   const fetchPenerima = async () => {
+    setLoading(true);
+    setError('');
     try {
-      const response = await fetch('http://localhost:5000/penerima', {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      const data = await response.json();
-
-      if (response.ok) {
-        setPenerimaList(data.data || []);
-      } else {
-        setError(data.pesan);
-        if (response.status === 401) navigate('/login');
-      }
+      const res = await api.get('/penerima');
+      setPenerimaList(res.data.data);
     } catch (err) {
-      setError('Gagal terhubung ke server.');
+      setError('Gagal memuat data penerima manfaat.');
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
   };
 
   useEffect(() => {
-    if (!token) navigate('/login');
-    else fetchPenerima();
-  }, [navigate, token]);
+    fetchPenerima();
+  }, []);
 
-  const handleTambahPenerima = async (e) => {
+  const handleChange = (e) => {
+    setFormData({ ...formData, [e.target.name]: e.target.value });
+  };
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!namaPenerima.trim()) return;
+    if (!formData.nama_penerima.trim()) return alert("Nama penerima wajib diisi!");
 
+    setIsSubmitting(true);
     try {
-      const response = await fetch('http://localhost:5000/penerima', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({ 
-          nama_penerima: namaPenerima,
-          alamat: alamat,
-          qty_porsi_besar: porsiBesar,
-          qty_porsi_kecil: porsiKecil
-        })
-      });
-      
-      const data = await response.json();
-      if (response.ok) {
-        setNamaPenerima('');
-        setAlamat('');
-        setPorsiBesar(0);
-        setPorsiKecil(0);
-        fetchPenerima(); 
+      const payload = {
+        nama_penerima: formData.nama_penerima,
+        alamat: formData.alamat,
+        qty_porsi_besar: parseInt(formData.qty_porsi_besar) || 0,
+        qty_porsi_kecil: parseInt(formData.qty_porsi_kecil) || 0,
+      };
+
+      if (editId) {
+        // Mode Edit
+        await api.put(`/penerima/${editId}`, payload);
+        alert('Data penerima berhasil diperbarui!');
       } else {
-        alert(data.pesan);
+        // Mode Tambah
+        await api.post('/penerima', payload);
+        alert('Penerima baru berhasil ditambahkan!');
       }
+
+      // Reset Form & Refresh Data
+      handleCancelEdit();
+      fetchPenerima();
     } catch (err) {
-      alert('Gagal menambah penerima manfaat.');
+      alert(err.response?.data?.pesan || 'Terjadi kesalahan saat menyimpan data.');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
-  const handleHapusPenerima = async (id_penerima) => {
-    const konfirmasi = window.confirm('Hapus penerima ini? Data jadwal menu yang terhubung mungkin akan ikut terhapus!');
-    if (!konfirmasi) return;
-
-    try {
-      const response = await fetch(`http://localhost:5000/penerima/${id_penerima}`, {
-        method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      
-      const data = await response.json();
-      if (response.ok) {
-        setPenerimaList(penerimaList.filter(p => p.id_penerima !== id_penerima));
-      } else {
-        alert(data.pesan);
-      }
-    } catch (err) {
-      alert('Gagal menghapus penerima.');
-    }
+  const handleEditClick = (p) => {
+    setEditId(p.id_penerima);
+    setFormData({
+      nama_penerima: p.nama_penerima,
+      alamat: p.alamat || '',
+      qty_porsi_besar: p.qty_porsi_besar,
+      qty_porsi_kecil: p.qty_porsi_kecil
+    });
+    // Scroll layar ke atas agar form edit terlihat
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const isAuthorized = role === '1' || role === '2';
+  const handleCancelEdit = () => {
+    setEditId(null);
+    setFormData({ nama_penerima: '', alamat: '', qty_porsi_besar: '', qty_porsi_kecil: '' });
+  };
+
+  const handleHapus = async (id) => {
+    if (!window.confirm('Hapus data penerima ini? Data jadwal menu yang terkait mungkin ikut terpengaruh.')) return;
+    try {
+      await api.delete(`/penerima/${id}`);
+      setPenerimaList(penerimaList.filter(p => p.id_penerima !== id));
+    } catch (err) {
+      alert(err.response?.data?.pesan || 'Gagal menghapus data penerima.');
+    }
+  };
 
   return (
-    <Layout title="Penerima Manfaat">
+    <Layout title="Data Penerima Manfaat">
       <div className="space-y-6">
         
-        {error && (
-          <div className="p-4 bg-red-50 text-red-600 border border-red-200 rounded-xl font-medium flex items-center gap-2">
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-            {error}
-          </div>
-        )}
+        {error && <div className="p-4 bg-red-50 text-red-600 rounded-xl font-medium border border-red-200">{error}</div>}
 
-        {/* FORM TAMBAH PENERIMA */}
+        {/* --- FORM TAMBAH / EDIT (Hanya tampil jika diizinkan) --- */}
         {isAuthorized && (
-          <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
-            <h3 className="text-lg font-bold text-embege-primary mb-5 flex items-center gap-2">
-              <svg className="w-5 h-5 text-embege-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg>
-              Registrasi Penerima Baru
+          <div className={`p-6 rounded-xl shadow-sm border transition-colors ${editId ? 'bg-yellow-50 border-yellow-200' : 'bg-white border-gray-200'}`}>
+            <h3 className={`text-lg font-bold mb-4 ${editId ? 'text-yellow-800' : 'text-blue-900'}`}>
+              {editId ? 'Ubah Data Penerima' : 'Tambah Penerima Baru'}
             </h3>
             
-            <form onSubmit={handleTambahPenerima} className="space-y-5">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-1.5">Nama Penerima</label>
+                  <label className="block text-sm font-semibold mb-1">Nama Penerima / Panti / Lembaga</label>
                   <input 
-                    type="text" 
-                    placeholder="Contoh: Panti Asuhan Harapan" 
-                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-embege-light focus:border-embege-primary outline-none transition-all"
-                    value={namaPenerima}
-                    onChange={(e) => setNamaPenerima(e.target.value)}
-                    required
+                    type="text" name="nama_penerima" required 
+                    className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white" 
+                    value={formData.nama_penerima} onChange={handleChange} 
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-1.5">Alamat</label>
+                  <label className="block text-sm font-semibold mb-1">Alamat Lengkap</label>
                   <input 
-                    type="text" 
-                    placeholder="Contoh: Jl. Merdeka No. 10" 
-                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-embege-light focus:border-embege-primary outline-none transition-all"
-                    value={alamat}
-                    onChange={(e) => setAlamat(e.target.value)}
+                    type="text" name="alamat" 
+                    className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white" 
+                    value={formData.alamat} onChange={handleChange} 
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-1.5">Target Porsi Besar</label>
+                  <label className="block text-sm font-semibold mb-1">Target Porsi Besar (Default)</label>
                   <input 
-                    type="number" 
-                    min="0"
-                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-embege-light focus:border-embege-primary outline-none transition-all"
-                    value={porsiBesar}
-                    onChange={(e) => setPorsiBesar(Number(e.target.value))}
-                    required
+                    type="number" min="0" name="qty_porsi_besar" 
+                    className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white" 
+                    value={formData.qty_porsi_besar} onChange={handleChange} 
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-1.5">Target Porsi Kecil</label>
+                  <label className="block text-sm font-semibold mb-1">Target Porsi Kecil (Default)</label>
                   <input 
-                    type="number" 
-                    min="0"
-                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-embege-light focus:border-embege-primary outline-none transition-all"
-                    value={porsiKecil}
-                    onChange={(e) => setPorsiKecil(Number(e.target.value))}
-                    required
+                    type="number" min="0" name="qty_porsi_kecil" 
+                    className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white" 
+                    value={formData.qty_porsi_kecil} onChange={handleChange} 
                   />
                 </div>
               </div>
-              <div className="flex justify-end pt-3">
-                <button 
-                  type="submit" 
-                  className="bg-embege-green hover:brightness-95 text-embege-primary font-bold py-2.5 px-8 rounded-lg transition duration-200 shadow-sm flex items-center gap-2"
-                >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" /></svg>
-                  Simpan Penerima
+
+              <div className="flex gap-3 pt-2">
+                {editId && (
+                  <button type="button" onClick={handleCancelEdit} className="px-6 py-2.5 bg-gray-200 text-gray-700 font-bold rounded-lg hover:bg-gray-300 transition">
+                    Batal Edit
+                  </button>
+                )}
+                <button type="submit" disabled={isSubmitting} className={`flex-1 font-bold py-2.5 rounded-lg text-white transition ${isSubmitting ? 'bg-gray-400' : editId ? 'bg-yellow-600 hover:bg-yellow-700' : 'bg-blue-600 hover:bg-blue-700'}`}>
+                  {isSubmitting ? 'Menyimpan...' : editId ? 'Update Data Penerima' : '+ Simpan Penerima Baru'}
                 </button>
               </div>
             </form>
           </div>
         )}
 
-        {/* TABEL DAFTAR PENERIMA */}
-        <div className="bg-white rounded-xl shadow-sm overflow-hidden border border-gray-200 overflow-x-auto">
+        {/* --- TABEL DAFTAR PENERIMA --- */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
           <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-embege-light text-embege-primary border-b border-embege-primary/10">
+             <thead className="bg-gray-50">
               <tr>
-                <th className="px-6 py-4 text-left text-xs font-extrabold uppercase tracking-wider">Nama & Alamat</th>
-                <th className="px-6 py-4 text-center text-xs font-extrabold uppercase tracking-wider">Porsi Besar</th>
-                <th className="px-6 py-4 text-center text-xs font-extrabold uppercase tracking-wider">Porsi Kecil</th>
-                {isAuthorized && (
-                  <th className="px-6 py-4 text-right text-xs font-extrabold uppercase tracking-wider w-32">Aksi</th>
-                )}
+                <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase">Nama Lembaga / Penerima</th>
+                <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase">Alamat</th>
+                <th className="px-6 py-4 text-center text-xs font-bold text-gray-500 uppercase">Target Porsi (B/K)</th>
+                {isAuthorized && <th className="px-6 py-4 text-right text-xs font-bold text-gray-500 uppercase">Aksi</th>}
               </tr>
             </thead>
-            <tbody className="bg-white divide-y divide-gray-100">
-              {isLoading ? (
-                <tr>
-                  <td colSpan="4" className="px-6 py-12 text-center text-gray-500 font-medium">Memuat data dari server...</td>
-                </tr>
-              ) : (!Array.isArray(penerimaList) || penerimaList.length === 0) ? (
-                <tr>
-                  <td colSpan="4" className="px-6 py-12 text-center text-gray-500 flex flex-col items-center justify-center">
-                    <svg className="w-12 h-12 text-gray-300 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" /></svg>
-                    Belum ada data penerima.
-                  </td>
-                </tr>
+            <tbody className="divide-y divide-gray-100">
+              {loading ? (
+                <tr><td colSpan={isAuthorized ? "4" : "3"} className="p-8 text-center text-gray-500">Memuat data...</td></tr>
+              ) : penerimaList.length === 0 ? (
+                <tr><td colSpan={isAuthorized ? "4" : "3"} className="p-8 text-center text-gray-500">Belum ada data penerima manfaat.</td></tr>
               ) : (
                 penerimaList.map((p) => (
-                  <tr key={p.id_penerima} className="hover:bg-gray-50 transition duration-150">
-                    <td className="px-6 py-4">
-                      <div className="text-sm font-bold text-embege-primary">{p.nama_penerima}</div>
-                      <div className="text-sm text-gray-500 mt-0.5">{p.alamat || 'Alamat tidak diisi'}</div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-center">
-                      <span className="bg-embege-light/30 text-embege-primary border border-embege-light py-1 px-3 rounded-md font-semibold text-xs">
-                        {p.qty_porsi_besar}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-center">
-                      <span className="bg-embege-light/30 text-embege-primary border border-embege-light py-1 px-3 rounded-md font-semibold text-xs">
-                        {p.qty_porsi_kecil}
-                      </span>
+                  <tr key={p.id_penerima} className="hover:bg-blue-50 transition">
+                    <td className="px-6 py-4 text-sm font-bold text-gray-800">{p.nama_penerima}</td>
+                    <td className="px-6 py-4 text-sm text-gray-600">{p.alamat || '-'}</td>
+                    <td className="px-6 py-4 text-sm text-center font-bold">
+                      <span className="text-blue-600">{p.qty_porsi_besar || 0}</span> / <span className="text-orange-500">{p.qty_porsi_kecil || 0}</span>
                     </td>
                     {isAuthorized && (
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-right">
-                        <button 
-                          onClick={() => handleHapusPenerima(p.id_penerima)}
-                          className="text-white font-semibold bg-red-500 hover:bg-red-600 py-1.5 px-3 rounded-md transition duration-200 flex items-center justify-center gap-1.5 ml-auto shadow-sm"
-                        >
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                          Hapus
-                        </button>
+                      <td className="px-6 py-4 text-right text-sm font-medium space-x-3">
+                        <button onClick={() => handleEditClick(p)} className="text-yellow-600 hover:text-yellow-800 bg-yellow-50 px-3 py-1 rounded-md transition">Edit</button>
+                        <button onClick={() => handleHapus(p.id_penerima)} className="text-red-500 hover:text-red-700 bg-red-50 px-3 py-1 rounded-md transition">Hapus</button>
                       </td>
                     )}
                   </tr>
@@ -236,7 +201,7 @@ const Penerima = () => {
             </tbody>
           </table>
         </div>
-        
+
       </div>
     </Layout>
   );

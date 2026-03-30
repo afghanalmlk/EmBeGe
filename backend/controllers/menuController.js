@@ -91,6 +91,7 @@ const getMenu = async (req, res) => {
         let queryStr = `
             SELECT 
                 m.id_menu, 
+                j.id_jadwal,        -- <--- TAMBAHKAN BARIS INI (id_jadwal)
                 m.nama_menu, 
                 j.tanggal, 
                 p.nama_penerima, 
