@@ -1,5 +1,6 @@
-// backend/middleware/roleMiddleware.js
-const pool = require('../db');
+// src/middlewares/roleMiddleware.js
+const pool = require('../config/db'); // <-- Path diperbarui dari '../db'
+
 
 // Fungsi pembungkus (Factory Function) agar bisa menerima parameter
 const authorizeSPPG = (tableName, idColumnName) => {
@@ -123,4 +124,3 @@ const authorizeMenuParent = async (req, res, next) => {
 };
 
 module.exports = { authorizeSPPG, requireSuperadmin, forbidAkuntan, authorizeGizi, authorizeMenuParent, forbidGiziAndAkuntan, forbidAhliGizi };
-
