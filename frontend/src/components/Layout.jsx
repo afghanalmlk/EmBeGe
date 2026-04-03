@@ -1,9 +1,38 @@
 import { Link, useNavigate, useLocation } from 'react-router-dom';
+import { useState, useEffect } from 'react'; // <-- TAMBAHKAN INI
+import axiosInstance from '../api/axiosInstance'; // <-- TAMBAHKAN INI
 
 const Layout = ({ children, title }) => {
   const navigate = useNavigate();
   const location = useLocation();
   const role = localStorage.getItem('role');
+  const [sppgList, setSppgList] = useState([]);
+
+  useEffect(() => {
+    if (role === '1') { // Jika Superadmin
+      const fetchSppg = async () => {
+        try {
+          const response = await axiosInstance.get('/sppg');
+          setSppgList(response.data);
+        } catch (error) {
+          console.error("Gagal mengambil data SPPG", error);
+        }
+      };
+      fetchSppg();
+    }
+  }, [role]);
+
+  const handleSppgChange = (e) => {
+    const selectedId = e.target.value;
+    const selectedSppg = sppgList.find(s => s.id_sppg == selectedId);
+    
+    if (selectedSppg) {
+      localStorage.setItem('id_sppg', selectedSppg.id_sppg);
+      localStorage.setItem('nama_sppg', selectedSppg.nama_sppg);
+      localStorage.setItem('alamat_sppg', selectedSppg.alamat);
+      window.location.reload(); 
+    }
+  };
 
   const handleLogout = () => {
     localStorage.clear(); // <-- Jauh lebih aman dan efektif
@@ -80,12 +109,13 @@ const Layout = ({ children, title }) => {
             className="text-3xl font-black tracking-wide text-embege-gold" 
             style={{ fontFamily: "'Montserrat', sans-serif" }}
           >
-            EmBeGe
+            
           </span>
         </div>
 
         <nav className="flex-1 p-4 space-y-2 overflow-y-auto mt-4">
           {navItems.map((item) => {
+            if (item.name === 'User Management' && role !== '1' && role !== '2') return null;
             const isActive = location.pathname === item.path;
             return (
               <Link
@@ -93,7 +123,7 @@ const Layout = ({ children, title }) => {
                 to={item.path}
                 // Penambahan flex dan gap agar ikon dan teks sejajar rapi
                 className={`flex items-center gap-3 py-3 px-4 rounded-lg transition-all duration-200 font-medium ${
-                  isActive 
+                  isActive  
                     ? 'bg-embege-light text-embege-primary shadow-md font-bold' 
                     : 'text-gray-300 hover:bg-[#132a5e] hover:text-white'        
                 }`}
@@ -122,9 +152,37 @@ const Layout = ({ children, title }) => {
 
           {/* Info SPPG (Jika ada di localStorage) */}
           <div className="px-2 mb-4">
-            <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest">Unit Kerja</p>
-            <p className="text-xs text-embege-light font-medium truncate">SPPG Al-Hidayah {/* Sesuaikan data ini */}</p>
-            <p className="text-[9px] text-gray-400 leading-tight mt-1 line-clamp-2">Jl. Soekarno Hatta No. 123, Bandung</p>
+            <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest mb-1">Unit Kerja</p>
+            
+            {role === '1' ? (
+              // Tampilan Dropdown untuk Superadmin
+              <select 
+                className="w-full bg-[#132a5e] text-xs text-embege-light font-medium p-1.5 rounded border border-gray-600 focus:outline-none focus:border-embege-gold cursor-pointer"
+                onChange={handleSppgChange}
+                value={localStorage.getItem('id_sppg') || ''}
+              >
+                <option value="" disabled>-- Pilih Lingkungan SPPG --</option>
+                {sppgList.map(sppg => (
+                  <option key={sppg.id_sppg} value={sppg.id_sppg}>
+                    {sppg.nama_sppg}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              // Tampilan Dinamis Clickable untuk user biasa
+              <Link 
+                to="/sppg/profile" 
+                className="block hover:bg-[#132a5e] p-1.5 rounded transition-all -ml-1.5 cursor-pointer"
+                title="Lihat Profil SPPG"
+              >
+                <p className="text-xs text-embege-light font-medium truncate">
+                  {localStorage.getItem('nama_sppg') || 'SPPG Belum Diatur'}
+                </p>
+                <p className="text-[9px] text-gray-400 leading-tight mt-1 line-clamp-2">
+                  {localStorage.getItem('alamat_sppg') || 'Alamat tidak tersedia'}
+                </p>
+              </Link>
+            )}
           </div>
 
           <button 

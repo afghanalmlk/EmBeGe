@@ -80,12 +80,12 @@ const login = async (req, res) => {
 
         // Ambil data user beserta nama SPPG-nya (BERGUNA UNTUK UI FRONTEND)
         const userQuery = await pool.query(`
-            SELECT u.*, s.nama_sppg 
+            SELECT u.*, s.nama_sppg, s.alamat 
             FROM users u 
             LEFT JOIN sppg s ON u.id_sppg = s.id_sppg 
             WHERE u.username = $1
         `, [username]);
-        
+
         if (userQuery.rows.length === 0) {
             return res.status(401).json({ pesan: "Username atau password salah!" });
         }
@@ -111,7 +111,8 @@ const login = async (req, res) => {
                 username: user.username,
                 id_role: user.id_role,
                 id_sppg: user.id_sppg,
-                nama_sppg: user.nama_sppg // Kirim nama SPPG untuk ditampilkan di Sidebar/Layout
+                nama_sppg: user.nama_sppg, 
+                alamat_sppg: user.alamat 
             }
         });
 

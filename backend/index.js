@@ -49,6 +49,10 @@ app.use('/po', poRoutes);
 const invoiceRoutes = require('./routes/invoiceRoutes');
 app.use('/invoice', invoiceRoutes);
 
+// UPDATE 9
+const sppgRoutes = require('./routes/sppgRoutes');
+app.use('/sppg', sppgRoutes);
+
 app.get('/', (req, res) => {
   res.send('Halo! Server Backend Manajemen Stok Dapur sudah menyala!');
 });

@@ -9,6 +9,8 @@ import PO from './pages/PO';
 import Invoice from './pages/Invoice';
 import Users from './pages/Users';
 import Profile from './pages/Profile';
+import SppgProfile from './pages/SppgProfile';
+import Layout from './components/Layout'; // <-- INI YANG KURANG
 
 const ProtectedRoute = ({ children }) => {
   const token = localStorage.getItem('token');
@@ -31,6 +33,7 @@ function App() {
         <Route path="/invoice" element={<ProtectedRoute><Invoice /></ProtectedRoute>} />
         <Route path="/users" element={<ProtectedRoute><Users /></ProtectedRoute>} />
         <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
+        <Route path="/sppg/profile" element={<ProtectedRoute><Layout title="Profil Unit Kerja"><SppgProfile /></Layout></ProtectedRoute>} />
       </Routes>
     </Router>
   );

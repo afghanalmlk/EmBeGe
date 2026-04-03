@@ -25,6 +25,7 @@ const Login = () => {
       localStorage.setItem('token', token);
       localStorage.setItem('role', user.id_role);
       localStorage.setItem('username', user.username);
+      localStorage.setItem('alamat_sppg', response.data.user.alamat_sppg)
       
       // Simpan nama SPPG jika ada (berguna untuk ditampilkan di UI Layout)
       if (user.nama_sppg) {

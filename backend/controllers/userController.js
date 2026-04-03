@@ -3,31 +3,45 @@ const pool = require('../db');
 
 const getUsers = async (req, res) => {
     try {
+        const role_id = req.user.id_role;
+        const sppg_id = req.user.id_sppg;
+
+        // Gunakan LEFT JOIN agar user yang belum punya SPPG (misal Superadmin utama) tetap muncul
         let queryStr = `
-            SELECT u.id_user, u.username, u.email, u.no_telp, r.nama_role, s.nama_sppg 
-            FROM users u 
-            JOIN role r ON u.id_role = r.id_role 
+            SELECT 
+                u.id_user, 
+                u.username, 
+                u.no_telp AS kontak, 
+                u.id_role, 
+                r.nama_role, -- <--- TAMBAHAN: Mengambil nama jabatan
+                u.id_sppg, 
+                s.nama_sppg, 
+                s.alamat
+            FROM users u
+            JOIN role r ON u.id_role = r.id_role -- <--- TAMBAHAN: Relasi ke tabel role
             LEFT JOIN sppg s ON u.id_sppg = s.id_sppg
         `;
         let queryParams = [];
 
-        // Jika bukan Superadmin, filter agar hanya melihat pegawai di SPPG yang sama
-        if (req.user.id_role !== 1) {
+        // Jika yang login BUKAN Superadmin (Role 1), maka batasi HANYA user di SPPG-nya sendiri
+        if (role_id !== 1) {
             queryStr += ` WHERE u.id_sppg = $1`;
-            queryParams.push(req.user.id_sppg);
+            queryParams.push(sppg_id);
         }
 
-        queryStr += ` ORDER BY u.id_sppg ASC, r.id_role ASC`;
+        // Urutkan berdasarkan Role (KaSPPG di atas) lalu nama
+        queryStr += ` ORDER BY u.id_role ASC, u.username ASC`;
 
-        const usersQuery = await pool.query(queryStr, queryParams);
-
-        res.status(200).json({
-            pesan: "Berhasil mengambil data pegawai",
-            data: usersQuery.rows
+        const userQuery = await pool.query(queryStr, queryParams);
+        
+        res.status(200).json({ 
+            pesan: "Berhasil memuat data user",
+            data: userQuery.rows 
         });
+
     } catch (error) {
-        console.error("Error get users:", error.message);
-        res.status(500).json({ pesan: "Terjadi kesalahan pada server saat mengambil data pegawai." });
+        console.error("Backend Error getUser:", error.message);
+        res.status(500).json({ pesan: "Terjadi kesalahan saat mengambil data user dari database." });
     }
 };
 
