@@ -19,4 +19,10 @@ const createSppgTx = async (client, data) => {
     return rows[0];
 };
 
-module.exports = { createSppgTx };
+// TAMBAHAN BARU:
+const getAllSppg = async () => {
+    const { rows } = await pool.query('SELECT id_sppg, nama_sppg, alamat FROM sppg ORDER BY nama_sppg ASC');
+    return rows;
+};
+
+module.exports = { createSppgTx, getAllSppg };
