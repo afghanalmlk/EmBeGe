@@ -1,10 +1,8 @@
-// 1. Memanggil library 'pg' untuk koneksi ke PostgreSQL
+// src/config/db.js
 const { Pool } = require('pg');
-
-// 2. Memanggil 'dotenv' agar kita bisa membaca file .env
 require('dotenv').config();
 
-// 3. Membuat pengaturan koneksi menggunakan data dari .env
+// Konfigurasi koneksi database PostgreSQL menggunakan environment variables
 const pool = new Pool({
   user: process.env.DB_USER,
   password: process.env.DB_PASSWORD,
@@ -13,5 +11,5 @@ const pool = new Pool({
   database: process.env.DB_NAME
 });
 
-// 4. Mengekspor (membagikan) jembatan ini agar bisa dipakai di file lain
+// Export pool agar bisa digunakan di model untuk query database
 module.exports = pool;
