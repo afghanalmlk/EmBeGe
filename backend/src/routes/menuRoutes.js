@@ -2,15 +2,12 @@ const express = require('express');
 const router = express.Router();
 
 const { verifyToken } = require('../middlewares/authMiddleware');
-const { forbidAkuntan, authorizeSPPG } = require('../middlewares/roleMiddleware');
 const { tambahMenu, getMenu, editMenu, hapusMenu } = require('../controllers/menuController');
+const { forbidRoles, authorizeSPPG } = require('../middlewares/roleMiddleware');
 
-// GET: Semua role bisa melihat menu sesuai SPPG-nya
 router.get('/', verifyToken, getMenu);
-
-// POST, PATCH, DELETE: 
-router.post('/', verifyToken, forbidAkuntan, tambahMenu);
-router.patch('/:id', verifyToken, forbidAkuntan, authorizeSPPG('menu', 'id_menu'), editMenu); // MENGGUNAKAN PATCH
-router.delete('/:id', verifyToken, forbidAkuntan, authorizeSPPG('menu', 'id_menu'), hapusMenu);
-
+// Memblokir Role 4 (Akuntan)
+router.post('/', verifyToken, forbidRoles([4]), tambahMenu);
+router.patch('/:id', verifyToken, forbidRoles([4]), authorizeSPPG('menu', 'id_menu'), editMenu);
+router.delete('/:id', verifyToken, forbidRoles([4]), authorizeSPPG('menu', 'id_menu'), hapusMenu);
 module.exports = router;

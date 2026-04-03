@@ -1,8 +1,8 @@
 const express = require('express');
 const router = express.Router();
 
-const { verifyToken } = require('../middlewares/authMiddleware');
 const { getUsers, addUser, editUser, hapusUser } = require('../controllers/userController');
+const { verifyToken } = require('../middlewares/authMiddleware');
 
 // Melihat daftar pegawai
 router.get('/', verifyToken, getUsers);

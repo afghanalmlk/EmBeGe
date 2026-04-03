@@ -1,16 +1,12 @@
 const express = require('express');
 const router = express.Router();
 
-const { verifyToken } = require('../middlewares/authMiddleware');
-const { authorizeSPPG, forbidGiziAndAkuntan } = require('../middlewares/roleMiddleware');
 const { getAllPenerima, tambahPenerima, editPenerima, hapusPenerima } = require('../controllers/penerimaController');
+const { verifyToken } = require('../middlewares/authMiddleware');
+const { authorizeSPPG, forbidRoles } = require('../middlewares/roleMiddleware');
 
-// GET: Semua role (termasuk Gizi & Akuntan) boleh melihat data sesuai SPPG-nya
 router.get('/', verifyToken, getAllPenerima);
-
-// POST, PATCH, DELETE:
-router.post('/', verifyToken, forbidGiziAndAkuntan, tambahPenerima);
-router.patch('/:id', verifyToken, forbidGiziAndAkuntan, authorizeSPPG('penerima_manfaat', 'id_penerima'), editPenerima); // MENGGUNAKAN PATCH
-router.delete('/:id', verifyToken, forbidGiziAndAkuntan, authorizeSPPG('penerima_manfaat', 'id_penerima'), hapusPenerima);
-
+router.post('/', verifyToken, forbidRoles([3, 4]), tambahPenerima);
+router.patch('/:id', verifyToken, forbidRoles([3, 4]), authorizeSPPG('penerima_manfaat', 'id_penerima'), editPenerima);
+router.delete('/:id', verifyToken, forbidRoles([3, 4]), authorizeSPPG('penerima_manfaat', 'id_penerima'), hapusPenerima);
 module.exports = router;

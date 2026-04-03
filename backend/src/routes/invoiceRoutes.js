@@ -2,14 +2,12 @@ const express = require('express');
 const router = express.Router();
 
 const { verifyToken } = require('../middlewares/authMiddleware');
-const { authorizeSPPG, forbidAhliGizi } = require('../middlewares/roleMiddleware');
 const { getInvoice, tambahInvoice, editInvoice, hapusInvoice, updateStatusInvoice } = require('../controllers/invoiceController');
+const { authorizeSPPG, forbidRoles } = require('../middlewares/roleMiddleware');
 
 router.get('/', verifyToken, getInvoice);
-
-router.post('/', verifyToken, forbidAhliGizi, tambahInvoice);
-router.patch('/:id', verifyToken, forbidAhliGizi, authorizeSPPG('invoice', 'id_invoice'), editInvoice); // PUT -> PATCH
-router.delete('/:id', verifyToken, forbidAhliGizi, authorizeSPPG('invoice', 'id_invoice'), hapusInvoice);
-router.patch('/:id/status', verifyToken, authorizeSPPG('invoice', 'id_invoice'), updateStatusInvoice); // PUT -> PATCH
-
+router.post('/', verifyToken, forbidRoles([3]), tambahInvoice);
+router.patch('/:id', verifyToken, forbidRoles([3]), authorizeSPPG('invoice', 'id_invoice'), editInvoice);
+router.delete('/:id', verifyToken, forbidRoles([3]), authorizeSPPG('invoice', 'id_invoice'), hapusInvoice);
+router.patch('/:id/status', verifyToken, authorizeSPPG('invoice', 'id_invoice'), updateStatusInvoice);
 module.exports = router;
