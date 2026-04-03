@@ -56,6 +56,12 @@ const deleteMenu = async (id_menu) => {
 };
 
 module.exports = { 
-    createMenuTx, getBarangByNameTx, createBarangTx, createDetailMenuTx, createJadwalMenuTx, 
-    getAllMenu, updateMenuName, deleteMenu 
+    createMenuTx, 
+    getBarangByNameTx, 
+    createBarangTx, 
+    createDetailMenuTx, 
+    createJadwalMenuTx, 
+    getAllMenu, 
+    updateMenuName, 
+    deleteMenu 
 };

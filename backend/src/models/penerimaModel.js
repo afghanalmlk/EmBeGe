@@ -34,4 +34,9 @@ const deletePenerima = async (id_penerima) => {
     await pool.query('DELETE FROM penerima_manfaat WHERE id_penerima = $1', [id_penerima]);
 };
 
-module.exports = { getAllPenerima, createPenerima, updatePenerima, deletePenerima };
+module.exports = { 
+    getAllPenerima, 
+    createPenerima, 
+    updatePenerima, 
+    deletePenerima 
+};

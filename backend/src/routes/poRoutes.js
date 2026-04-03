@@ -1,8 +1,8 @@
 const express = require('express');
 const router = express.Router();
 
-const { verifyToken } = require('../middlewares/authMiddleware');
 const { getPO, tambahPO, updateStatusPO, hapusPO } = require('../controllers/poController');
+const { verifyToken } = require('../middlewares/authMiddleware');
 const { authorizeSPPG, forbidRoles } = require('../middlewares/roleMiddleware');
 
 router.get('/', verifyToken, getPO);

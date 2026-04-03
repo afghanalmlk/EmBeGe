@@ -1,6 +1,5 @@
 // src/middlewares/roleMiddleware.js
 const authModel = require('../models/authModel');
-const { sendResponse } = require('../utils/responseHelper'); // Menggunakan helper!
 
 // ==========================================
 // 1. DYNAMIC ROLE CHECKERS (Lebih Clean & DRY)
@@ -10,7 +9,7 @@ const { sendResponse } = require('../utils/responseHelper'); // Menggunakan help
 const allowRoles = (allowedRoles) => {
     return (req, res, next) => {
         if (!allowedRoles.includes(req.user.id_role)) {
-            return sendResponse(res, 403, "Akses ditolak. Fitur ini hanya untuk Superadmin.");
+            return res.status(403).json({ pesan: "Akses ditolak. Fitur ini hanya untuk Superadmin." });
         }
         next();
     };
@@ -21,7 +20,7 @@ const forbidRoles = (forbiddenRoles, customMessage) => {
     return (req, res, next) => {
         if (forbiddenRoles.includes(req.user.id_role)) {
             const msg = customMessage || "Akses ditolak. Anda hanya diperbolehkan melihat data.";
-            return sendResponse(res, 403, msg);
+            return res.status(403).json({ pesan: msg });
         }
         next();
     };
@@ -38,12 +37,13 @@ const authorizeSPPG = (tableName, idColumnName) => {
 
             const data = await authModel.getResourceSppgId(tableName, idColumnName, req.params.id);
             
-            if (!data) return sendResponse(res, 404, "Data tidak ditemukan.");
-            if (data.id_sppg !== req.user.id_sppg) return sendResponse(res, 403, "Akses ditolak. Ini bukan data milik SPPG Anda!");
+            if (!data) return res.status(404).json({ pesan: "Data tidak ditemukan." });
+            if (data.id_sppg !== req.user.id_sppg) return res.status(403).json({ pesan: "Akses ditolak. Ini bukan data milik SPPG Anda!" });
 
             next();
         } catch (error) {
-            sendResponse(res, 500, "Terjadi kesalahan server saat memvalidasi otorisasi akses.");
+            console.error(`Error authorizeSPPG di tabel ${tableName}:`, error.message);
+            res.status(500).json({ pesan: "Terjadi kesalahan server saat memvalidasi otorisasi akses." });
         }
     };
 };
@@ -54,28 +54,30 @@ const authorizeGizi = async (req, res, next) => {
 
         const data = await authModel.getGiziSppgId(req.params.id);
         
-        if (!data) return sendResponse(res, 404, "Data gizi tidak ditemukan.");
-        if (data.id_sppg !== req.user.id_sppg) return sendResponse(res, 403, "Akses ditolak. Bukan data Gizi dari SPPG Anda.");
+        if (!data) return res.status(404).json({ pesan: "Data gizi tidak ditemukan." });
+        if (data.id_sppg !== req.user.id_sppg) return res.status(403).json({ pesan: "Akses ditolak. Bukan data Gizi dari SPPG Anda." });
         
         next();
     } catch (error) { 
-        sendResponse(res, 500, "Error validasi otorisasi Gizi."); 
+        console.error("Error authorizeGizi:", error.message);
+        res.status(500).json({ pesan: "Error validasi otorisasi Gizi." }); 
     }
 };
 
 const authorizeMenuParent = async (req, res, next) => {
     try {
         if (req.user.id_role === 1) return next();
-        if (!req.body.id_menu) return sendResponse(res, 400, "ID Menu wajib disertakan.");
+        if (!req.body.id_menu) return res.status(400).json({ pesan: "ID Menu wajib disertakan." });
 
         const data = await authModel.getMenuSppgId(req.body.id_menu);
         
-        if (!data) return sendResponse(res, 404, "Menu tidak ditemukan.");
-        if (data.id_sppg !== req.user.id_sppg) return sendResponse(res, 403, "Akses ditolak. Anda tidak bisa menambah gizi ke Menu milik SPPG lain.");
+        if (!data) return res.status(404).json({ pesan: "Menu tidak ditemukan." });
+        if (data.id_sppg !== req.user.id_sppg) return res.status(403).json({ pesan: "Akses ditolak. Anda tidak bisa menambah gizi ke Menu milik SPPG lain." });
 
         next();
     } catch (error) { 
-        sendResponse(res, 500, "Error validasi Parent Menu."); 
+        console.error("Error authorizeMenuParent:", error.message);
+        res.status(500).json({ pesan: "Error validasi Parent Menu." }); 
     }
 };
 

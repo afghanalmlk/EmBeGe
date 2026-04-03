@@ -25,4 +25,7 @@ const getAllSppg = async () => {
     return rows;
 };
 
-module.exports = { createSppgTx, getAllSppg };
+module.exports = { 
+    createSppgTx, 
+    getAllSppg 
+};

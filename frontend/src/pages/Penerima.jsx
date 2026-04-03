@@ -57,7 +57,7 @@ const Penerima = () => {
 
       if (editId) {
         // Mode Edit
-        await api.put(`/penerima/${editId}`, payload);
+        await api.patch(`/penerima/${editId}`, payload);
         alert('Data penerima berhasil diperbarui!');
       } else {
         // Mode Tambah

@@ -34,4 +34,8 @@ const getMenuSppgId = async (id_menu) => {
     return rows[0] || null;
 };
 
-module.exports = { getResourceSppgId, getGiziSppgId, getMenuSppgId };
+module.exports = { 
+    getResourceSppgId, 
+    getGiziSppgId, 
+    getMenuSppgId 
+};

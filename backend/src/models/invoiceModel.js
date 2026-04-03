@@ -44,4 +44,11 @@ const updateStatusInvoice = async (id_invoice, status_invoice) => {
     await pool.query('UPDATE invoice SET status_invoice = $1 WHERE id_invoice = $2', [status_invoice, id_invoice]);
 };
 
-module.exports = { getAllInvoice, createInvoiceTx, createDetailInvoiceTx, updateInvoice, deleteInvoice, updateStatusInvoice };
+module.exports = { 
+    getAllInvoice, 
+    createInvoiceTx, 
+    createDetailInvoiceTx, 
+    updateInvoice, 
+    deleteInvoice, 
+    updateStatusInvoice 
+};

@@ -75,4 +75,14 @@ const deletePO = async (id_po) => {
     await pool.query('DELETE FROM po WHERE id_po = $1', [id_po]);
 };
 
-module.exports = { getAllPO, checkJadwalMenuSppgTx, createPOTx, createDetailPOTx, createHistoriPOTx, updateStatusPOTx, getDetailPOIdsTx, getPOStatus, deletePO };
+module.exports = { 
+    getAllPO, 
+    checkJadwalMenuSppgTx, 
+    createPOTx, 
+    createDetailPOTx, 
+    createHistoriPOTx, 
+    updateStatusPOTx, 
+    getDetailPOIdsTx, 
+    getPOStatus, 
+    deletePO 
+};

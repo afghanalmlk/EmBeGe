@@ -40,4 +40,10 @@ const deleteGizi = async (id_gizi) => {
     await pool.query('DELETE FROM gizi WHERE id_gizi = $1', [id_gizi]);
 };
 
-module.exports = { getAllGizi, checkDuplicateGizi, createGizi, updateGizi, deleteGizi };
+module.exports = { 
+    getAllGizi, 
+    checkDuplicateGizi, 
+    createGizi, 
+    updateGizi, 
+    deleteGizi 
+};

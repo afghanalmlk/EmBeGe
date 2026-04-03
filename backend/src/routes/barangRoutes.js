@@ -2,8 +2,8 @@ const express = require('express');
 const router = express.Router();
 
 // Path middleware disesuaikan menjadi '../middlewares/...'
-const { verifyToken } = require('../middlewares/authMiddleware');
 const { getAllBarang, tambahBarang, editBarang, hapusBarang } = require('../controllers/barangController');
+const { verifyToken } = require('../middlewares/authMiddleware');
 const { allowRoles } = require('../middlewares/roleMiddleware'); 
 
 router.get('/', verifyToken, getAllBarang);

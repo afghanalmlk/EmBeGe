@@ -88,12 +88,12 @@ const PO = () => {
 
   const handleApprovePO = async (id_po) => {
     if (!window.confirm('Setujui Purchase Order ini?')) return;
-    try { await api.put(`/po/${id_po}/status`, { status_po: 'Disetujui' }); fetchData(); setDetailModalOpen(false); } catch (err) { alert(err.response?.data?.pesan); }
+    try { await api.patch(`/po/${id_po}/status`, { status_po: 'Disetujui' }); fetchData(); setDetailModalOpen(false); } catch (err) { alert(err.response?.data?.pesan); }
   };
 
   const handleTolakPO = async (id_po) => {
     if (!window.confirm('Tolak Purchase Order ini?')) return;
-    try { await api.put(`/po/${id_po}/status`, { status_po: 'Ditolak' }); fetchData(); setDetailModalOpen(false); } catch (err) { alert(err.response?.data?.pesan); }
+    try { await api.patch(`/po/${id_po}/status`, { status_po: 'Ditolak' }); fetchData(); setDetailModalOpen(false); } catch (err) { alert(err.response?.data?.pesan); }
   };
 
   const handleHapusPO = async (id_po) => {

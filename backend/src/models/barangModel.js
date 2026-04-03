@@ -30,4 +30,11 @@ const deleteBarang = async (id_barang) => {
     return rows[0];
 };
 
-module.exports = { getAllBarang, getBarangByName, getBarangByNameExcludeId, createBarang, updateBarang, deleteBarang };
+module.exports = { 
+    getAllBarang, 
+    getBarangByName, 
+    getBarangByNameExcludeId, 
+    createBarang, 
+    updateBarang, 
+    deleteBarang 
+};

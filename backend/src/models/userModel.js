@@ -100,7 +100,14 @@ const deleteUser = async (id_user) => {
 };
 
 module.exports = {
-    checkDuplicateUser, getUserByUsernameWithSppg, createUserTx,
-    getAllUsers, checkRoleInSppg, createUser, checkDuplicateExcludeId,
-    updateUser, getUserById, deleteUser
+    checkDuplicateUser, 
+    getUserByUsernameWithSppg, 
+    createUserTx,
+    getAllUsers, 
+    checkRoleInSppg, 
+    createUser, 
+    checkDuplicateExcludeId,
+    updateUser, 
+    getUserById, 
+    deleteUser
 };

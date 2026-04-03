@@ -95,7 +95,7 @@ const Invoice = () => {
   const handleApproveInvoice = async (id) => {
     if (!window.confirm('Setujui tagihan (Invoice) ini?')) return;
     try {
-      await api.put(`/invoice/${id}/status`, { status_invoice: 'Disetujui' });
+      await api.patch(`/invoice/${id}/status`, { status_invoice: 'Disetujui' });
       fetchData(); setDetailModalOpen(false);
     } catch (err) { alert('Gagal menyetujui invoice.'); }
   };
@@ -103,7 +103,7 @@ const Invoice = () => {
   const handleTolakInvoice = async (id) => {
     if (!window.confirm('Tolak tagihan (Invoice) ini?')) return;
     try {
-      await api.put(`/invoice/${id}/status`, { status_invoice: 'Ditolak' });
+      await api.patch(`/invoice/${id}/status`, { status_invoice: 'Ditolak' });
       fetchData(); setDetailModalOpen(false);
     } catch (err) { alert('Gagal menolak invoice.'); }
   };
