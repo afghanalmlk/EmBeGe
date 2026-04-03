@@ -178,7 +178,14 @@ ALTER TABLE histori_po ADD CONSTRAINT histori_po_id_detail_po_fkey FOREIGN KEY (
 -- Perbaikan untuk Detail Invoice
 ALTER TABLE detail_invoice DROP CONSTRAINT detail_invoice_id_invoice_fkey;
 ALTER TABLE detail_invoice ADD CONSTRAINT detail_invoice_id_invoice_fkey FOREIGN KEY (id_invoice) REFERENCES invoice(id_invoice) ON DELETE CASCADE;
-
 ALTER TABLE detail_po ADD COLUMN satuan VARCHAR(50);
-
 ALTER TABLE invoice ADD COLUMN status_invoice VARCHAR(50) DEFAULT 'Pending';
+
+-- Tambahan untuk alur approval
+ALTER TABLE menu ADD COLUMN status_menu VARCHAR(50) DEFAULT 'Pending Akuntan';
+ALTER TABLE menu ADD COLUMN catatan_akuntan TEXT;
+
+-- Tambahan untuk review bahan baku oleh akuntan
+ALTER TABLE detail_menu ADD COLUMN qty_standar DECIMAL DEFAULT 0;
+ALTER TABLE detail_menu ADD COLUMN satuan VARCHAR(50);
+ALTER TABLE detail_menu ADD COLUMN is_approved_akuntan BOOLEAN DEFAULT FALSE;

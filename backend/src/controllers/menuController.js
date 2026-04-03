@@ -1,78 +1,132 @@
-const pool = require('../config/db'); // Diperlukan untuk inisiasi Transaction Client
+const pool = require('../config/db');
 const menuModel = require('../models/menuModel');
 
-const tambahMenu = async (req, res) => {
+// ================= MASTER MENU =================
+const tambahMenuMaster = async (req, res) => {
     const client = await pool.connect();
     try {
-        const { nama_menu, bahan_bahan, id_penerima, tanggal, qty_porsi_besar, qty_porsi_kecil } = req.body;
+        const { nama_menu, bahan_bahan } = req.body;
         const id_user = req.user.id_user; 
 
-        if (!nama_menu || !tanggal || !bahan_bahan || bahan_bahan.length === 0) {
-            return res.status(400).json({ pesan: "Nama Menu, Tanggal, dan minimal 1 Bahan Baku wajib diisi!" });
+        if (!nama_menu || !bahan_bahan || bahan_bahan.length === 0) {
+            return res.status(400).json({ pesan: "Nama Menu dan minimal 1 Bahan Baku wajib diisi!" });
         }
 
-        await client.query('BEGIN'); // Mulai Transaksi
-
-        // 1. Insert Menu
+        await client.query('BEGIN');
         const id_menu = await menuModel.createMenuTx(client, nama_menu.trim(), id_user);
 
-        // 2. Loop & Proses Bahan Baku (Barang + Detail Menu)
         for (const nama_barang of bahan_bahan) {
             const barangBersih = nama_barang.trim();
             let id_barang;
 
             const cekBarang = await menuModel.getBarangByNameTx(client, barangBersih);
-            if (cekBarang) {
-                id_barang = cekBarang.id_barang;
-            } else {
-                id_barang = await menuModel.createBarangTx(client, barangBersih);
-            }
+            if (cekBarang) { id_barang = cekBarang.id_barang; } 
+            else { id_barang = await menuModel.createBarangTx(client, barangBersih); }
+            
             await menuModel.createDetailMenuTx(client, id_menu, id_barang);
         }
 
-        // 3. Insert Jadwal Menu
-        await menuModel.createJadwalMenuTx(client, {
-            id_menu, id_penerima, tanggal, qty_porsi_besar, qty_porsi_kecil, id_user
-        });
-
-        await client.query('COMMIT'); // Sahkan!
-
-        res.status(201).json({ pesan: "Menu, Bahan Baku, dan Jadwal berhasil disimpan serentak!", id_menu });
+        await client.query('COMMIT');
+        res.status(201).json({ pesan: "Menu berhasil dibuat dan menunggu review Akuntan!", id_menu });
     } catch (error) {
-        await client.query('ROLLBACK'); // Batalkan jika ada error
-        console.error("Error Form Menu:", error.message);
+        await client.query('ROLLBACK');
         res.status(500).json({ pesan: "Terjadi kesalahan sistem, transaksi dibatalkan." });
-    } finally {
-        client.release();
-    }
+    } finally { client.release(); }
 };
 
-const getMenu = async (req, res) => {
+const getMasterMenu = async (req, res) => {
     try {
-        const data = await menuModel.getAllMenu(req.user.id_role, req.user.id_sppg);
-        const pesan = req.user.id_role === 1 ? "Berhasil mengambil semua menu (Akses Superadmin)" : "Berhasil mengambil daftar menu SPPG Anda";
-        res.json({ pesan, data });
-    } catch (error) {
-        res.status(500).json({ pesan: "Terjadi kesalahan pada server" });
-    }
+        const data = await menuModel.getAllMasterMenu(req.user.id_role, req.user.id_sppg);
+        res.json({ data });
+    } catch (error) { res.status(500).json({ pesan: "Terjadi kesalahan pada server" }); }
 };
 
-const editMenu = async (req, res) => {
-    try {
-        if (!req.body.nama_menu) return res.status(400).json({ pesan: "Nama menu tidak boleh kosong!" });
-        await menuModel.updateMenuName(req.params.id, req.body.nama_menu.trim());
-        res.json({ pesan: "Nama menu diperbarui" });
-    } catch (error) { 
-        res.status(500).json({ pesan: "Terjadi kesalahan pada server" }); 
-    }
-};
-
-const hapusMenu = async (req, res) => {
+const hapusMenuMaster = async (req, res) => {
     try {
         await menuModel.deleteMenu(req.params.id);
-        res.json({ pesan: "Menu beserta jadwal dan detailnya berhasil dihapus" });
-    } catch (error) { 
-        res.status(500).json({ pesan: "Terjadi kesalahan pada server" }); 
-    }
+        res.json({ pesan: "Menu master beserta resepnya berhasil dihapus" });
+    } catch (error) { res.status(500).json({ pesan: "Terjadi kesalahan pada server" }); }
 };
-module.exports = { tambahMenu, getMenu, editMenu, hapusMenu };
+
+// ================= APPROVAL LOGIC =================
+const reviewAkuntan = async (req, res) => {
+    const client = await pool.connect();
+    try {
+        const { id } = req.params;
+        const { is_approved_semua, catatan, bahan_checklist } = req.body;
+        
+        await client.query('BEGIN');
+
+        // Update status checklist tiap bahan
+        if (bahan_checklist && bahan_checklist.length > 0) {
+            for (const bahan of bahan_checklist) {
+                await client.query('UPDATE detail_menu SET is_approved_akuntan = $1 WHERE id_detail_menu = $2', [bahan.is_approved, bahan.id_detail_menu]);
+            }
+        }
+
+        const statusBaru = is_approved_semua ? 'Disetujui Akuntan' : 'Revisi';
+        await client.query('UPDATE menu SET status_menu = $1, catatan_akuntan = $2 WHERE id_menu = $3', [statusBaru, catatan, id]);
+
+        await client.query('COMMIT');
+        res.json({ pesan: `Review selesai. Status menu: ${statusBaru}` });
+    } catch (error) {
+        await client.query('ROLLBACK');
+        res.status(500).json({ pesan: "Gagal menyimpan hasil review Akuntan." });
+    } finally { client.release(); }
+};
+
+const approveKasppg = async (req, res) => {
+    try {
+        await pool.query('UPDATE menu SET status_menu = $1 WHERE id_menu = $2', ['Disetujui', req.params.id]);
+        res.json({ pesan: "Menu berhasil disetujui (Final)." });
+    } catch (error) { res.status(500).json({ pesan: "Gagal melakukan approval KaSPPG." }); }
+};
+
+
+// ================= JADWAL MENU (HARI INI) =================
+const tambahJadwal = async (req, res) => {
+    const client = await pool.connect();
+    try {
+        const { id_menu, tanggal, list_penerima } = req.body;
+        const id_user = req.user.id_user; 
+
+        if (!id_menu || !tanggal || !list_penerima || list_penerima.length === 0) {
+            return res.status(400).json({ pesan: "Pilih Menu Final, Tanggal, dan minimal 1 Penerima Manfaat!" });
+        }
+
+        await client.query('BEGIN');
+        
+        for (const penerima of list_penerima) {
+            await menuModel.createJadwalMenuTx(client, {
+                id_menu, id_penerima: penerima.id_penerima, tanggal, 
+                qty_porsi_besar: penerima.porsi_besar, qty_porsi_kecil: penerima.porsi_kecil, id_user
+            });
+        }
+
+        await client.query('COMMIT');
+        res.status(201).json({ pesan: "Jadwal Menu Hari Ini berhasil didistribusikan!" });
+    } catch (error) {
+        await client.query('ROLLBACK');
+        res.status(500).json({ pesan: "Gagal menyimpan jadwal menu." });
+    } finally { client.release(); }
+};
+
+const getJadwalMenu = async (req, res) => {
+    try {
+        const data = await menuModel.getAllJadwalMenu(req.user.id_role, req.user.id_sppg);
+        res.json({ data });
+    } catch (error) { res.status(500).json({ pesan: "Terjadi kesalahan pada server" }); }
+};
+
+const hapusJadwal = async (req, res) => {
+    try {
+        await menuModel.deleteJadwal(req.params.id);
+        res.json({ pesan: "Jadwal distribusi berhasil dihapus" });
+    } catch (error) { res.status(500).json({ pesan: "Terjadi kesalahan pada server" }); }
+};
+
+module.exports = { 
+    tambahMenuMaster, getMasterMenu, hapusMenuMaster, 
+    reviewAkuntan, approveKasppg, 
+    tambahJadwal, getJadwalMenu, hapusJadwal 
+};

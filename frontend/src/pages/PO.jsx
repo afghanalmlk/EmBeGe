@@ -32,10 +32,12 @@ const PO = () => {
     setLoading(true); setError('');
     try {
       const [resPO, resMenu, resBarang] = await Promise.all([
-        api.get('/po'), api.get('/menu'), api.get('/barang')
+        api.get('/po'), 
+        api.get('/menu/jadwal'),
+        api.get('/barang')
       ]);
       setPoList(resPO.data.data || []);
-      setMenuList((resMenu.data.data || []).filter(m => m.id_jadwal != null));
+      setMenuList(resMenu.data.data || []); 
       setBarangList(resBarang.data.data || []);
     } catch (err) {
       setError('Gagal memuat data PO atau Master Data.');
