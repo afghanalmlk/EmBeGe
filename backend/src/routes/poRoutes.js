@@ -7,6 +7,9 @@ const { authorizeSPPG, forbidRoles } = require('../middlewares/roleMiddleware');
 
 router.get('/', verifyToken, getPO);
 router.post('/', verifyToken, forbidRoles([3]), tambahPO);
-router.patch('/:id/status', verifyToken, forbidRoles([3]), authorizeSPPG('invoice', 'id_invoice'), updateStatusPO);
-router.delete('/:id', verifyToken, forbidRoles([3]), authorizeSPPG('invoice', 'id_invoice'), hapusPO);
+
+
+
+router.patch('/:id/status', verifyToken, forbidRoles([3]), authorizeSPPG('po', 'id_po'), updateStatusPO);
+router.delete('/:id', verifyToken, forbidRoles([3]), authorizeSPPG('po', 'id_po'), hapusPO);
 module.exports = router;
