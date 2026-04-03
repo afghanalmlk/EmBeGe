@@ -33,8 +33,10 @@ api.interceptors.response.use(
     return response;
   },
   (error) => {
-    // Jika backend membalas dengan status 401 (Unauthorized / Token Kadaluarsa)
-    if (error.response && error.response.status === 401) {
+    // Cek apakah error ini berasal dari URL login
+    const isLoginRequest = error.config && error.config.url && error.config.url.includes('/auth/login');
+    // Jika status 401 DAN BUKAN sedang login, baru hapus token & reload
+    if (error.response && error.response.status === 401 && !isLoginRequest) {
       // Bersihkan semua sisa data login di browser
       localStorage.clear();
       // Tendang paksa user kembali ke halaman login

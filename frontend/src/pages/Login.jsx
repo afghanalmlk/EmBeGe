@@ -6,41 +6,39 @@ const Login = () => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [successMsg, setSuccessMsg] = useState('');
   const [loading, setLoading] = useState(false); // Tambahkan state loading
   const navigate = useNavigate();
 
   const handleLogin = async (e) => {
     e.preventDefault();
     setError('');
+    setSuccessMsg('');
     setLoading(true); // Mulai loading saat tombol ditekan
 
     try {
       // Tidak perlu lagi menulis full URL 'http://localhost:5000', cukup path-nya saja
       const response = await api.post('/auth/login', { username, password });
-      
       // Axios otomatis melakukan parsing JSON, datanya ada di response.data
       const { token, user } = response.data;
-
       // Simpan semua data krusial ke brankas browser (localStorage)
       localStorage.setItem('token', token);
       localStorage.setItem('role', user.id_role);
       localStorage.setItem('username', user.username);
       localStorage.setItem('alamat_sppg', response.data.user.alamat_sppg)
-      
       // Simpan nama SPPG jika ada (berguna untuk ditampilkan di UI Layout)
       if (user.nama_sppg) {
         localStorage.setItem('nama_sppg', user.nama_sppg);
       }
+      setSuccessMsg(`Selamat datang, ${user.username}!`);
+      setTimeout(() => {
+        navigate('/menu');
+      }, 1500);
 
-      alert(`Selamat datang, ${user.username}!`);
-      navigate('/menu'); // Pindah ke halaman dashboard
-      
     } catch (err) {
-      // Menangkap pesan error dari backend, atau error jaringan jika server mati
       setError(err.response?.data?.pesan || 'Gagal terhubung ke server. Periksa koneksi Anda.');
-    } finally {
-      setLoading(false); // Matikan loading setelah selesai (berhasil/gagal)
-    }
+      setLoading(false); // Matikan loading hanya jika error (karena jika sukses, jeda dihandle setTimeout)
+    }  
   };
 
   return (
@@ -54,6 +52,12 @@ const Login = () => {
           </div>
         )}
 
+        {successMsg && (
+          <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded relative mb-4">
+            {successMsg}
+          </div>
+        )}
+
         <form onSubmit={handleLogin} className="space-y-4">
           <div>
             <label className="block text-gray-700 text-sm font-bold mb-2">Username</label>
@@ -61,7 +65,10 @@ const Login = () => {
               type="text" 
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
               value={username}
-              onChange={(e) => setUsername(e.target.value)}
+              onChange={(e) => {
+                setUsername(e.target.value);
+                if (error) setError(''); // Hapus error saat user mulai mengetik
+              }}
               disabled={loading} // Kunci input saat loading
               required 
             />
@@ -72,7 +79,10 @@ const Login = () => {
               type="password" 
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
               value={password}
-              onChange={(e) => setPassword(e.target.value)}
+              onChange={(e) => {
+                setPassword(e.target.value);
+                if (error) setError(''); // Hapus error saat user mulai mengetik
+              }}
               disabled={loading} // Kunci input saat loading
               required 
             />

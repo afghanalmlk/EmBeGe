@@ -26,9 +26,7 @@ const forbidRoles = (forbiddenRoles, customMessage) => {
     };
 };
 
-// ==========================================
 // 2. RESOURCE AUTHORIZATION (Kepemilikan Data SPPG)
-// ==========================================
 
 const authorizeSPPG = (tableName, idColumnName) => {
     return async (req, res, next) => {
