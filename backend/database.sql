@@ -189,3 +189,45 @@ ALTER TABLE menu ADD COLUMN catatan_akuntan TEXT;
 ALTER TABLE detail_menu ADD COLUMN qty_standar DECIMAL DEFAULT 0;
 ALTER TABLE detail_menu ADD COLUMN satuan VARCHAR(50);
 ALTER TABLE detail_menu ADD COLUMN is_approved_akuntan BOOLEAN DEFAULT FALSE;
+
+-- Membuat tabel Histori Invoice
+CREATE TABLE histori_invoice (
+    id_histori SERIAL PRIMARY KEY,
+    id_invoice INT REFERENCES invoice(id_invoice) ON DELETE CASCADE,
+    action VARCHAR(100),
+    action_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    action_by INT REFERENCES users(id_user)
+);
+
+-- Membuat tabel Histori Menu
+CREATE TABLE histori_menu (
+    id_histori SERIAL PRIMARY KEY,
+    id_menu INT REFERENCES menu(id_menu) ON DELETE CASCADE,
+    action VARCHAR(100),
+    action_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    action_by INT REFERENCES users(id_user)
+);
+
+--Buat kolom id_po
+ALTER TABLE histori_po ADD COLUMN id_po INT;
+
+-- 3. Cocokkan dan isi id_po di histori dengan id_po dari tabel detail_po
+UPDATE histori_po hp
+SET id_po = dp.id_po
+FROM detail_po dp
+WHERE hp.id_detail_po = dp.id_detail_po;
+
+-- 4. Bersihkan data histori yatim piatu (jika ada detail_po yang duluan terhapus)
+DELETE FROM histori_po WHERE id_po IS NULL;
+
+-- 5. Pasang Foreign Key yang BENAR langsung ke tabel PO
+ALTER TABLE histori_po ADD CONSTRAINT histori_po_id_po_fkey FOREIGN KEY (id_po) REFERENCES po(id_po) ON DELETE CASCADE;
+
+-- 6. Hapus kolom id_detail_po karena histori kini diikat langsung ke dokumen PO utamanya
+ALTER TABLE histori_po DROP COLUMN id_detail_po;
+
+ALTER TABLE po ADD COLUMN catatan_kasppg TEXT;
+
+ALTER TABLE invoice ADD COLUMN catatan_kasppg TEXT;
+
+ALTER TABLE menu ADD COLUMN catatan_kasppg TEXT;

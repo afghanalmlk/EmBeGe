@@ -17,28 +17,41 @@ const Menu = () => {
   const isAhliGizi = roleId === 3;
   const isAkuntan = roleId === 4;
 
-  const canCreate = isSuperadmin || isKaSPPG || isAhliGizi;
-  const canReview = isSuperadmin || isKaSPPG || isAkuntan;
-  const canApprove = isSuperadmin || isKaSPPG;
+  // Aturan Akses Sesuai Blueprint Final
+  const canCreate = isSuperadmin || isKaSPPG || isAhliGizi; // Ahli Gizi & KaSPPG bisa buat/revisi
+  const canReview = isSuperadmin || isAkuntan;  // Akuntan mereview bahan (checklist)
+  const canApprove = isSuperadmin || isKaSPPG; // KaSPPG approval (Setujui/Tolak)
+  const canDelete = isSuperadmin || isKaSPPG; // Hanya KaSPPG yg boleh hapus
 
   // --- STATE FORM MASTER MENU ---
   const [namaMenu, setNamaMenu] = useState('');
   const [bahanInput, setBahanInput] = useState('');
   const [bahanBahan, setBahanBahan] = useState([]);
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [editId, setEditId] = useState(null);
 
   // --- STATE FORM JADWAL MENU ---
   const [jadwalIdMenu, setJadwalIdMenu] = useState('');
   const [jadwalTanggal, setJadwalTanggal] = useState('');
-  const [selectedPenerima, setSelectedPenerima] = useState({}); // { id: { porsi_besar, porsi_kecil } }
+  const [selectedPenerima, setSelectedPenerima] = useState({});
 
-  // --- MODALS ---
-  const [menuToReview, setMenuToReview] = useState(null); // Untuk Modal Akuntan
+  // --- MODALS DETAIL & REVIEW ---
+  const [detailModal, setDetailModal] = useState(null);
   const [reviewCatatan, setReviewCatatan] = useState('');
   const [reviewChecklist, setReviewChecklist] = useState({});
 
-  const [selectedGiziMenu, setSelectedGiziMenu] = useState(null); // Untuk Modal Gizi
+  // --- STATE GIZI ---
+  const [selectedGiziMenu, setSelectedGiziMenu] = useState(null);
   const [giziList, setGiziList] = useState([]);
   const [giziFormData, setGiziFormData] = useState({ jenis_porsi: 'Besar', energi: '', protein: '', lemak: '', karbo: '', serat: '' });
+
+  // PARSER ANTI-BLANK (Mengurai string JSON dari DB ke Array)
+  const parseData = (data) => {
+      if (typeof data === 'string') {
+          try { return JSON.parse(data); } catch { return []; }
+      }
+      return Array.isArray(data) ? data : [];
+  };
 
   const fetchData = async () => {
     setIsLoading(true); setError('');
@@ -46,7 +59,14 @@ const Menu = () => {
       const [resMaster, resJadwal, resPenerima] = await Promise.all([
         api.get('/menu/master'), api.get('/menu/jadwal'), api.get('/penerima')
       ]);
-      setMasterMenus(resMaster.data.data || []);
+      
+      const safeMasterMenus = (resMaster.data.data || []).map(m => ({
+          ...m,
+          bahan_bahan: parseData(m.bahan_bahan || m.daftar_bahan), 
+          histori: parseData(m.histori)
+      }));
+
+      setMasterMenus(safeMasterMenus);
       setJadwalMenus(resJadwal.data.data || []);
       setPenerimaList(resPenerima.data.data || []);
     } catch (err) { setError('Gagal memuat data.'); } 
@@ -55,64 +75,116 @@ const Menu = () => {
 
   useEffect(() => { fetchData(); }, []);
 
-  // ================= 1. HANDLER MASTER MENU =================
-  const handleTambahMaster = async (e) => {
+  const formatDateTime = (dateString) => dateString ? new Date(dateString).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute:'2-digit' }) : '-';
+
+  // ================= HANDLERS MASTER MENU =================
+  const handleTambahBahan = () => {
+      if (bahanInput.trim()) {
+          setBahanBahan([...bahanBahan, bahanInput.trim()]);
+          setBahanInput('');
+      }
+  };
+
+  const handleSubmitMaster = async (e) => {
     e.preventDefault();
     if (bahanBahan.length === 0) return alert("Masukkan minimal 1 bahan baku!");
     try {
-      await api.post('/menu/master', { nama_menu: namaMenu, bahan_bahan: bahanBahan });
+      if (isEditMode) {
+        await api.patch(`/menu/master/${editId}`, { nama_menu: namaMenu, bahan_bahan: bahanBahan });
+        alert("Revisi menu berhasil diajukan ulang!");
+        setIsEditMode(false); setEditId(null);
+      } else {
+        await api.post('/menu/master', { nama_menu: namaMenu, bahan_bahan: bahanBahan });
+        alert("Resep menu baru berhasil diajukan!");
+      }
       setNamaMenu(''); setBahanBahan([]); fetchData();
-    } catch (err) { alert(err.response?.data?.pesan); }
+    } catch (err) { alert(err.response?.data?.pesan || "Terjadi kesalahan."); }
+  };
+
+  const handleBatalEdit = () => {
+      setIsEditMode(false); setEditId(null); setNamaMenu(''); setBahanBahan([]);
+  };
+
+  const triggerEdit = (m) => {
+      const bahanArray = parseData(m.bahan_bahan || m.daftar_bahan);
+      setIsEditMode(true);
+      setEditId(m.id_menu);
+      setNamaMenu(m.nama_menu);
+      setBahanBahan(bahanArray.map(b => b.nama_barang));
+      setDetailModal(null); 
+      window.scrollTo({ top: 0, behavior: 'smooth' }); 
+  };
+
+  const openDetailModal = (m) => {
+      const bahanArray = parseData(m.bahan_bahan || m.daftar_bahan);
+      const historiArray = parseData(m.histori);
+      
+      setDetailModal({ ...m, bahan_bahan: bahanArray, histori: historiArray });
+      
+      const checks = {};
+      bahanArray.forEach(b => { checks[b.id_detail_menu] = b.is_approved_akuntan ?? b.is_approved; });
+      setReviewChecklist(checks);
+      setReviewCatatan('');
   };
 
   const submitReviewAkuntan = async (e) => {
     e.preventDefault();
-    // Jika semua bahan dicentang = True, jika ada 1 yg tidak dicentang = Revisi
-    const isApprovedSemua = menuToReview.bahan_bahan.every(b => reviewChecklist[b.id_detail_menu]);
-    const payloadChecklist = menuToReview.bahan_bahan.map(b => ({
-      id_detail_menu: b.id_detail_menu,
-      is_approved: !!reviewChecklist[b.id_detail_menu]
+    const bahanArray = parseData(detailModal.bahan_bahan);
+    const isApprovedSemua = bahanArray.every(b => reviewChecklist[b.id_detail_menu]);
+    const payloadChecklist = bahanArray.map(b => ({
+      id_detail_menu: b.id_detail_menu, is_approved: !!reviewChecklist[b.id_detail_menu]
     }));
 
     try {
-      await api.patch(`/menu/master/${menuToReview.id_menu}/review`, {
+      await api.patch(`/menu/master/${detailModal.id_menu}/review`, {
         is_approved_semua: isApprovedSemua, catatan: reviewCatatan, bahan_checklist: payloadChecklist
       });
-      setMenuToReview(null); fetchData();
-    } catch (err) { alert(err.response?.data?.pesan); }
+      alert("Hasil review berhasil disimpan!");
+      setDetailModal(null); fetchData();
+    } catch (err) { alert(err.response?.data?.pesan || "Gagal menyimpan review."); }
   };
 
-  const handleApproveKaSPPG = async (id_menu) => {
-    if (!window.confirm("Approve menu ini menjadi Final?")) return;
-    try { await api.patch(`/menu/master/${id_menu}/approve`); fetchData(); } 
-    catch (err) { alert(err.response?.data?.pesan); }
+  // Handler Setujui KaSPPG (Sesuai Blueprint PO)
+  const handleSetujuiMenu = async (id_menu) => {
+    if (!window.confirm("Setujui menu ini menjadi Final?")) return;
+    try { 
+      // Endpoint ini asumsikan Backend sudah disesuaikan menggunakan updateStatusMenu (PATCH /status)
+      await api.patch(`/menu/master/${id_menu}/status`, { status_menu: 'Disetujui' }); 
+      fetchData(); 
+    } catch (err) { 
+      // Fallback ke endpoint lama jika backend belum sempat diubah
+      try { await api.patch(`/menu/master/${id_menu}/approve`); fetchData(); } catch(e) { alert(e.response?.data?.pesan); }
+    }
+  };
+
+  // Handler Tolak KaSPPG
+  const handleTolakMenu = async (id_menu) => {
+    const alasan = window.prompt('Masukkan catatan/alasan penolakan Menu:');
+    if (alasan === null) return; 
+    try { 
+      await api.patch(`/menu/master/${id_menu}/status`, { status_menu: 'Ditolak', catatan: alasan }); 
+      fetchData(); 
+    } catch (err) { alert(err.response?.data?.pesan || "Gagal menolak menu"); }
   };
 
   const handleHapusMaster = async (id) => {
-    if (!window.confirm('Hapus Master Menu ini?')) return;
-    try { await api.delete(`/menu/master/${id}`); fetchData(); } catch (err) {}
+    if (!window.confirm('Hapus permanen Master Menu ini?')) return;
+    try { await api.delete(`/menu/master/${id}`); setDetailModal(null); fetchData(); } catch (err) {}
   };
 
-  // ================= 2. HANDLER JADWAL MENU =================
+  // ================= HANDLERS JADWAL & GIZI =================
   const handleTogglePenerima = (p) => {
     setSelectedPenerima(prev => {
       const next = { ...prev };
-      if (next[p.id_penerima]) {
-        delete next[p.id_penerima]; // Uncheck
-      } else {
-        // Ambil default dari tabel data penerima manfaat
-        next[p.id_penerima] = { porsi_besar: p.qty_porsi_besar || 0, porsi_kecil: p.qty_porsi_kecil || 0 }; 
-      }
+      if (next[p.id_penerima]) { delete next[p.id_penerima]; } 
+      else { next[p.id_penerima] = { porsi_besar: p.qty_porsi_besar || 0, porsi_kecil: p.qty_porsi_kecil || 0 }; }
       return next;
     });
   };
 
   const handleTambahJadwal = async (e) => {
     e.preventDefault();
-    const list_penerima = Object.keys(selectedPenerima).map(id => ({
-      id_penerima: id, ...selectedPenerima[id]
-    }));
-
+    const list_penerima = Object.keys(selectedPenerima).map(id => ({ id_penerima: id, ...selectedPenerima[id] }));
     if (list_penerima.length === 0) return alert("Centang minimal 1 Penerima Manfaat!");
     try {
       await api.post('/menu/jadwal', { id_menu: jadwalIdMenu, tanggal: jadwalTanggal, list_penerima });
@@ -125,7 +197,6 @@ const Menu = () => {
     try { await api.delete(`/menu/jadwal/${id}`); fetchData(); } catch (err) {}
   };
 
-  // ================= 3. HANDLER GIZI =================
   const openGiziModal = async (menu) => {
     setSelectedGiziMenu(menu);
     try {
@@ -133,6 +204,7 @@ const Menu = () => {
       setGiziList(res.data.data.filter(g => g.id_menu === menu.id_menu));
     } catch (err) { alert('Gagal load gizi.'); }
   };
+
   const handleTambahGizi = async (e) => {
     e.preventDefault();
     try {
@@ -141,89 +213,118 @@ const Menu = () => {
       openGiziModal(selectedGiziMenu); 
     } catch (err) { alert(err.response?.data?.pesan); }
   };
+
   const handleHapusGizi = async (id) => {
     if (!window.confirm('Hapus?')) return;
     try { await api.delete(`/gizi/${id}`); openGiziModal(selectedGiziMenu); } catch (err) {}
   };
 
+  // ================= UI RENDER =================
   return (
-    <Layout title="Manajemen Menu & Jadwal">
+    <Layout title="Manajemen Menu">
       <div className="space-y-6">
         {error && <div className="p-4 bg-red-50 text-red-600 rounded-xl font-medium border">{error}</div>}
 
-        {/* TABS */}
         <div className="flex border-b border-gray-200">
-          <button onClick={() => setActiveTab('master')} className={`px-6 py-3 font-bold border-b-2 ${activeTab === 'master' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:bg-gray-50'}`}>
-            Master Menu (Resep)
-          </button>
-          <button onClick={() => setActiveTab('jadwal')} className={`px-6 py-3 font-bold border-b-2 ${activeTab === 'jadwal' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:bg-gray-50'}`}>
-            Jadwal Menu Hari Ini
-          </button>
+          <button onClick={() => setActiveTab('master')} className={`px-6 py-3 font-bold border-b-2 transition ${activeTab === 'master' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:bg-gray-50'}`}>Master Menu (Resep)</button>
+          <button onClick={() => setActiveTab('jadwal')} className={`px-6 py-3 font-bold border-b-2 transition ${activeTab === 'jadwal' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:bg-gray-50'}`}>Jadwal Menu Hari Ini</button>
         </div>
 
-        {/* ================= TAB 1: MASTER MENU ================= */}
         {activeTab === 'master' && (
           <div className="space-y-6">
+            
+            {/* FORM INPUT MASTER MENU */}
             {canCreate && (
-              <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
-                <h3 className="font-bold text-lg mb-4 text-blue-900">Buat Menu Baru</h3>
-                <form onSubmit={handleTambahMaster} className="space-y-4">
-                  <input type="text" placeholder="Nama Menu (Contoh: Nasi Goreng Spesial)" className="w-full p-2 border rounded outline-none focus:ring-2 focus:ring-blue-500" value={namaMenu} onChange={(e) => setNamaMenu(e.target.value)} required />
+              <div className={`p-6 rounded-xl border shadow-sm transition ${isEditMode ? 'bg-orange-50 border-orange-200' : 'bg-white border-gray-200'}`}>
+                <h3 className={`text-lg font-bold mb-4 ${isEditMode ? 'text-orange-900' : 'text-blue-900'}`}>
+                    {isEditMode ? `Revisi / Perbaiki Resep Menu #${editId}` : 'Buat Resep Menu Baru'}
+                </h3>
+                <form onSubmit={handleSubmitMaster} className="space-y-4">
+                  <input type="text" placeholder="Nama Menu Utama (Contoh: Nasi Goreng Spesial)" className="w-full p-3 border rounded-lg outline-none focus:ring-2 focus:ring-blue-500" value={namaMenu} onChange={(e) => setNamaMenu(e.target.value)} required />
                   
-                  <div className="bg-blue-50 p-4 rounded border border-blue-100">
-                    <label className="block text-sm font-bold mb-2 text-blue-800">Bahan Baku</label>
+                  <div className={`${isEditMode ? 'bg-white border-orange-100' : 'bg-blue-50 border-blue-100'} p-4 rounded-xl border`}>
+                    <label className={`block text-sm font-bold mb-2 ${isEditMode ? 'text-orange-800' : 'text-blue-800'}`}>Daftar Bahan Baku</label>
                     <div className="flex gap-2 mb-3">
-                      <input type="text" placeholder="Ketik nama bahan lalu tekan Add/Enter..." className="flex-1 p-2 border rounded outline-none" value={bahanInput} onChange={(e) => setBahanInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), bahanInput && setBahanBahan([...bahanBahan, bahanInput.trim()], setBahanInput('')))} />
-                      <button type="button" onClick={() => bahanInput && setBahanBahan([...bahanBahan, bahanInput.trim()], setBahanInput(''))} className="bg-blue-600 text-white px-4 rounded font-bold hover:bg-blue-700">Add Bahan</button>
+                      <input type="text" placeholder="Ketik nama bahan baku lalu tekan Add/Enter..." className="flex-1 p-2 border rounded-lg outline-none focus:ring-2 focus:ring-blue-500" value={bahanInput} onChange={(e) => setBahanInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handleTambahBahan())} />
+                      <button type="button" onClick={handleTambahBahan} className={`text-white px-4 rounded-lg font-bold transition ${isEditMode ? 'bg-orange-600 hover:bg-orange-700' : 'bg-blue-600 hover:bg-blue-700'}`}>Add</button>
                     </div>
                     <div className="flex flex-wrap gap-2">
                       {bahanBahan.map((b, i) => (
-                        <span key={i} className="bg-white border px-3 py-1 rounded-full text-sm shadow-sm">{b} <button type="button" onClick={() => setBahanBahan(bahanBahan.filter((_, idx) => idx !== i))} className="text-red-500 ml-2 font-bold">&times;</button></span>
+                        <span key={i} className="bg-white border px-3 py-1 rounded-full text-sm shadow-sm font-medium flex items-center gap-2">
+                            {b} <button type="button" onClick={() => setBahanBahan(bahanBahan.filter((_, idx) => idx !== i))} className="text-red-500 font-bold hover:scale-125 transition">&times;</button>
+                        </span>
                       ))}
                     </div>
                   </div>
-                  <button type="submit" className="bg-blue-600 text-white font-bold py-2 px-6 rounded hover:bg-blue-700">Simpan Draft & Ajukan ke Akuntan</button>
+                  
+                  <div className="flex gap-3 pt-2">
+                    {isEditMode && (
+                        <button type="button" onClick={handleBatalEdit} className="font-bold py-3 px-8 rounded-lg bg-gray-200 text-gray-700 hover:bg-gray-300 w-full md:w-auto transition">Batal Revisi</button>
+                    )}
+                    <button type="submit" disabled={bahanBahan.length === 0} className={`w-full md:w-auto text-white font-bold py-3 px-8 rounded-lg shadow-sm transition ${bahanBahan.length === 0 ? 'bg-gray-400' : isEditMode ? 'bg-orange-600 hover:bg-orange-700' : 'bg-blue-600 hover:bg-blue-700'}`}>
+                        {isEditMode ? 'Simpan Revisi & Ajukan Ulang' : 'Simpan Draft & Ajukan'}
+                    </button>
+                  </div>
                 </form>
               </div>
             )}
             
-            {/* Tabel Master Menu */}
-            <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-100">
-                  <tr><th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase">Nama Menu</th><th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase">Status</th><th className="px-6 py-4 text-right text-xs font-bold text-gray-500 uppercase">Aksi</th></tr>
+            {/* TABEL DAFTAR MASTER MENU */}
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200 text-sm">
+                <thead className="bg-gray-50">
+                  <tr>
+                      <th className="px-6 py-4 text-left font-bold text-gray-500 uppercase w-1/3">Nama Menu</th>
+                      <th className="px-6 py-4 text-center font-bold text-gray-500 uppercase">Status & Persetujuan</th>
+                      <th className="px-6 py-4 text-center font-bold text-gray-500 uppercase">Detail</th>
+                  </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {isLoading ? <tr><td colSpan="3" className="text-center p-6 text-gray-500">Memuat...</td></tr> : 
-                   masterMenus.map(m => (
-                    <tr key={m.id_menu} className="hover:bg-gray-50">
+                  {isLoading ? <tr><td colSpan="3" className="text-center p-8 text-gray-500">Memuat data...</td></tr> : masterMenus.length === 0 ? <tr><td colSpan="3" className="p-8 text-center text-gray-500">Belum ada data.</td></tr> : masterMenus.map(m => (
+                    <tr key={m.id_menu} className="hover:bg-blue-50 transition">
                       <td className="px-6 py-4">
-                        <p className="font-bold text-blue-900">{m.nama_menu}</p>
-                        <p className="text-xs text-gray-500">Dibuat: {m.pembuat}</p>
-                        {m.catatan_akuntan && <p className="text-xs text-red-500 mt-1">Catatan: {m.catatan_akuntan}</p>}
+                        <p className="font-bold text-gray-800 text-base">{m.nama_menu}</p>
+                        <p className="text-xs text-gray-500 mt-1">Dibuat Oleh: <span className="font-medium text-gray-700">{m.pembuat}</span></p>
                       </td>
-                      <td className="px-6 py-4">
-                        <span className={`px-3 py-1 rounded-full text-xs font-bold ${
-                          m.status_menu === 'Disetujui' ? 'bg-green-100 text-green-700' : 
-                          m.status_menu === 'Disetujui Akuntan' ? 'bg-blue-100 text-blue-700' : 
-                          m.status_menu === 'Revisi' ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'
-                        }`}>{m.status_menu}</span>
+                      <td className="px-6 py-4 text-center">
+                        <div className="flex flex-col items-center gap-1.5">
+                          <span className={`px-3 py-1 rounded-full text-[11px] font-bold ${
+                            m.status_menu === 'Disetujui' ? 'bg-green-100 text-green-800' : 
+                            m.status_menu === 'Di Review Akuntan' || m.status_menu === 'Disetujui Akuntan' ? 'bg-blue-100 text-blue-800' : 
+                            m.status_menu === 'Revisi' || m.status_menu === 'Perlu Revisi' || m.status_menu === 'Ditolak' ? 'bg-red-100 text-red-800' : 'bg-yellow-100 text-yellow-800'
+                          }`}>{m.status_menu}</span>
+                          
+                          {/* Catatan Inline Jika Ditolak/Revisi */}
+                          {m.status_menu === 'Ditolak' && m.catatan_kasppg && (
+                             <p className="text-[10px] text-red-500 italic mt-1 max-w-[150px] truncate" title={m.catatan_kasppg}>Catatan: {m.catatan_kasppg}</p>
+                          )}
+                          {(m.status_menu === 'Perlu Revisi' || m.status_menu === 'Revisi') && m.catatan_akuntan && (
+                             <p className="text-[10px] text-red-500 italic mt-1 max-w-[150px] truncate" title={m.catatan_akuntan}>Catatan: {m.catatan_akuntan}</p>
+                          )}
+
+                          {/* Aksi Inline Berdasarkan Blueprint */}
+                          {(m.status_menu === 'Menunggu Di Review' || m.status_menu === 'Pending Akuntan') && canReview && (
+                            <div className="flex gap-1 mt-1">
+                                <button onClick={() => openDetailModal(m)} className="bg-yellow-500 hover:bg-yellow-600 text-white text-[10px] px-2 py-1 rounded shadow-sm font-bold transition">Review Bahan</button>
+                            </div>
+                          )}
+                          
+                          {(m.status_menu === 'Di Review Akuntan' || m.status_menu === 'Disetujui Akuntan') && canApprove && (
+                            <div className="flex gap-1 mt-1 justify-center">
+                                <button onClick={() => handleSetujuiMenu(m.id_menu)} className="bg-green-500 hover:bg-green-600 text-white text-[10px] px-2 py-1 rounded shadow-sm transition font-bold">Setujui</button>
+                                <button onClick={() => handleTolakMenu(m.id_menu)} className="bg-red-500 hover:bg-red-600 text-white text-[10px] px-2 py-1 rounded shadow-sm transition font-bold">Tolak</button>
+                            </div>
+                          )}
+
+                          {(m.status_menu === 'Revisi' || m.status_menu === 'Perlu Revisi' || m.status_menu === 'Ditolak') && canCreate && (
+                             <div className="flex gap-1 mt-1 justify-center">
+                                <button onClick={() => triggerEdit(m)} className="bg-orange-500 hover:bg-orange-600 text-white text-[10px] px-3 py-1 rounded shadow-sm font-bold transition">Revisi</button>
+                             </div>
+                          )}
+                        </div>
                       </td>
-                      <td className="px-6 py-4 text-right space-x-2">
-                        {canReview && m.status_menu === 'Pending Akuntan' && (
-                          <button onClick={() => {
-                            setMenuToReview(m);
-                            // Inisialisasi state checklist sesuai data DB
-                            const initialCheck = {};
-                            m.bahan_bahan.forEach(b => initialCheck[b.id_detail_menu] = b.is_approved_akuntan);
-                            setReviewChecklist(initialCheck);
-                            setReviewCatatan('');
-                          }} className="bg-yellow-500 hover:bg-yellow-600 text-white px-3 py-1 rounded font-bold text-sm">Review (Akuntan)</button>
-                        )}
-                        {canApprove && m.status_menu === 'Disetujui Akuntan' && (
-                          <button onClick={() => handleApproveKaSPPG(m.id_menu)} className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded font-bold text-sm">Approve (KaSPPG)</button>
-                        )}
-                        {canCreate && <button onClick={() => handleHapusMaster(m.id_menu)} className="text-red-500 font-bold hover:underline text-sm">Hapus</button>}
+                      <td className="px-6 py-4 text-center">
+                        <button onClick={() => openDetailModal(m)} className="text-blue-600 hover:text-white border border-blue-600 hover:bg-blue-600 px-4 py-1.5 rounded-lg shadow-sm text-xs font-bold transition">Lihat Detail</button>
                       </td>
                     </tr>
                   ))}
@@ -233,30 +334,131 @@ const Menu = () => {
           </div>
         )}
 
-        {/* MODAL REVIEW AKUNTAN */}
-        {menuToReview && (
-          <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
-            <div className="bg-white rounded-xl w-full max-w-lg overflow-hidden shadow-2xl">
-              <div className="p-4 border-b flex justify-between items-center bg-gray-50">
-                <h3 className="font-bold text-lg">Review Bahan: {menuToReview.nama_menu}</h3>
-                <button onClick={() => setMenuToReview(null)} className="text-xl font-bold text-gray-500 hover:text-red-500">&times;</button>
-              </div>
-              <form onSubmit={submitReviewAkuntan} className="p-6 space-y-4">
-                <p className="text-sm text-gray-600 mb-2">Centang bahan yang <b>disetujui</b>:</p>
-                <div className="border rounded-md p-3 max-h-60 overflow-y-auto space-y-2 bg-gray-50">
-                  {menuToReview.bahan_bahan.map(b => (
-                    <label key={b.id_detail_menu} className="flex items-center gap-3 bg-white p-2 border rounded cursor-pointer">
-                      <input type="checkbox" className="w-5 h-5 text-blue-600" 
-                        checked={!!reviewChecklist[b.id_detail_menu]}
-                        onChange={(e) => setReviewChecklist({...reviewChecklist, [b.id_detail_menu]: e.target.checked})} 
-                      />
-                      <span className="font-medium text-gray-800">{b.nama_barang}</span>
-                    </label>
-                  ))}
+        {/* MODAL POP UP DETAIL & REVIEW MENU */}
+        {detailModal && (
+          <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50 backdrop-blur-sm">
+            <div className="bg-white rounded-xl w-full max-w-3xl max-h-[90vh] overflow-y-auto shadow-2xl flex flex-col">
+              
+              {/* HEADER MODAL */}
+              <div className="flex justify-between items-center p-6 border-b sticky top-0 bg-blue-900 text-white z-10">
+                <div>
+                  <h3 className="text-xl font-black">{detailModal.nama_menu}</h3>
                 </div>
-                <textarea placeholder="Catatan (Opsional, wajib diisi jika ada bahan yang ditolak/revisi)" className="w-full p-2 border rounded text-sm" value={reviewCatatan} onChange={(e) => setReviewCatatan(e.target.value)} rows="3"></textarea>
-                <button type="submit" className="w-full bg-blue-600 text-white font-bold py-2 rounded hover:bg-blue-700">Simpan Review</button>
-              </form>
+                <button onClick={() => setDetailModal(null)} className="text-2xl font-bold text-gray-300 hover:text-red-400 transition">&times;</button>
+              </div>
+
+              <div className="p-6 space-y-6">
+                
+                {/* CATATAN REVISI / PENOLAKAN */}
+                {detailModal.status_menu === 'Ditolak' && detailModal.catatan_kasppg && (
+                    <div className="bg-red-50 border border-red-200 p-4 rounded-lg">
+                        <p className="text-sm text-red-700 font-bold uppercase mb-1">Catatan Penolakan KaSPPG:</p>
+                        <p className="text-sm text-red-800">{detailModal.catatan_kasppg}</p>
+                    </div>
+                )}
+                {(detailModal.status_menu === 'Perlu Revisi' || detailModal.status_menu === 'Revisi') && detailModal.catatan_akuntan && (
+                    <div className="bg-red-50 border border-red-200 p-4 rounded-lg">
+                        <p className="text-sm text-red-700 font-bold uppercase mb-1">Catatan Akuntan / Alasan Revisi:</p>
+                        <p className="text-sm text-red-800">{detailModal.catatan_akuntan}</p>
+                    </div>
+                )}
+                
+                {/* TABEL RINCIAN BAHAN */}
+                <div>
+                  <h4 className="font-bold text-gray-700 mb-3 border-b pb-2">Tabel Daftar Bahan</h4>
+                  
+                  {canReview && (detailModal.status_menu === 'Pending Akuntan' || detailModal.status_menu === 'Menunggu Di Review') ? (
+                    // TAMPILAN CHECKLIST UNTUK AKUNTAN
+                    <form onSubmit={submitReviewAkuntan} className="space-y-4 border border-gray-200 p-4 rounded-lg bg-gray-50">
+                        <p className="text-sm text-gray-600 mb-2">Centang bahan yang <b>disetujui</b> untuk dibeli:</p>
+                        <table className="min-w-full border rounded-lg overflow-hidden text-sm bg-white">
+                            <thead className="bg-gray-100 text-gray-600">
+                                <tr>
+                                    <th className="px-4 py-3 text-left w-3/4">Nama Bahan Baku</th>
+                                    <th className="px-4 py-3 text-center">Status Checklist</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-100">
+                                {detailModal.bahan_bahan.map(b => (
+                                    <tr key={b.id_detail_menu} className="hover:bg-gray-50 cursor-pointer" onClick={() => setReviewChecklist({...reviewChecklist, [b.id_detail_menu]: !reviewChecklist[b.id_detail_menu]})}>
+                                        <td className="px-4 py-3 font-bold text-gray-800">{b.nama_barang}</td>
+                                        <td className="px-4 py-3 text-center">
+                                            <input type="checkbox" className="w-5 h-5 text-blue-600 cursor-pointer" 
+                                                checked={!!reviewChecklist[b.id_detail_menu]}
+                                                onChange={(e) => setReviewChecklist({...reviewChecklist, [b.id_detail_menu]: e.target.checked})} 
+                                                onClick={e => e.stopPropagation()}
+                                            />
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                        <div className="pt-2">
+                            <label className="block text-sm font-bold text-gray-700 mb-2">Catatan Review (Jika ada yang ditolak)</label>
+                            <textarea placeholder="Tuliskan alasan revisi bahan..." className="w-full p-3 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500" value={reviewCatatan} onChange={(e) => setReviewCatatan(e.target.value)} rows="3"></textarea>
+                        </div>
+                        <button type="submit" className="w-full bg-blue-600 text-white font-bold py-3 rounded-lg shadow-sm hover:bg-blue-700 transition">Simpan Hasil Review Akuntan</button>
+                    </form>
+                  ) : (
+                    // TAMPILAN READ-ONLY TABLE (SESUAI BLUEPRINT)
+                    <table className="min-w-full border rounded-lg overflow-hidden text-sm bg-white">
+                        <thead className="bg-gray-100 text-gray-600">
+                            <tr>
+                                <th className="px-4 py-3 text-left w-3/4">Nama Bahan Baku</th>
+                                <th className="px-4 py-3 text-center">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100">
+                            {detailModal.bahan_bahan.map(b => (
+                                <tr key={b.id_detail_menu} className="hover:bg-gray-50">
+                                    <td className="px-4 py-3 font-bold text-gray-800">{b.nama_barang}</td>
+                                    <td className="px-4 py-3 text-center">
+                                        <span className={`text-[10px] font-black px-2 py-1 rounded ${b.is_approved_akuntan ?? b.is_approved ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}`}>
+                                            {b.is_approved_akuntan ?? b.is_approved ? "✓ APPROVED" : "✗ REJECTED"}
+                                        </span>
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                  )}
+                </div>
+
+                {/* TOMBOL REVISI (Jika status Revisi & Boleh Create) */}
+                {(detailModal.status_menu === 'Revisi' || detailModal.status_menu === 'Perlu Revisi' || detailModal.status_menu === 'Ditolak') && canCreate && (
+                    <div className="flex justify-end pt-2">
+                         <button onClick={() => triggerEdit(detailModal)} className="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-3 rounded-lg shadow-sm transition">
+                             Buka Form Perbaikan Resep Menu
+                         </button>
+                    </div>
+                )}
+
+                {/* HISTORI DOKUMEN */}
+                <div className="pt-4 border-t border-dashed border-gray-300">
+                    <h4 className="font-bold text-gray-700 mb-3 text-sm">Histori Dokumen</h4>
+                    <div className="space-y-2">
+                        {detailModal.histori && detailModal.histori.length > 0 ? detailModal.histori.map((h, i) => (
+                            <div key={i} className="flex items-center justify-between bg-gray-50 p-2.5 rounded-lg border border-gray-200 text-xs">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-2 h-2 rounded-full bg-blue-500 shrink-0"></div>
+                                    <span className="font-medium text-gray-800"><strong>{h.action}</strong> oleh <span className="text-blue-700 font-bold">{h.action_by}</span></span>
+                                </div>
+                                <span className="text-gray-400 font-medium">{formatDateTime(h.action_at)}</span>
+                            </div>
+                        )) : <p className="text-xs text-gray-500 italic">Tidak ada histori tindakan yang terekam.</p>}
+                    </div>
+                </div>
+
+                {/* TOMBOL HAPUS (HANYA KaSPPG & Superadmin jika belum disetujui final) */}
+                {canDelete && (
+                    <div className="pt-4 border-t flex justify-end">
+                         <button onClick={() => handleHapusMaster(detailModal.id_menu)} className="bg-red-50 text-red-600 hover:bg-red-600 hover:text-white px-5 py-2.5 rounded-lg text-xs font-bold border border-red-200 transition">
+                            Hapus Permanen Dokumen Menu
+                        </button>
+                    </div>
+                )}
+
+              </div>
             </div>
           </div>
         )}
@@ -290,7 +492,6 @@ const Menu = () => {
                           <input type="checkbox" className="w-5 h-5 text-blue-600" checked={!!selectedPenerima[p.id_penerima]} onChange={() => handleTogglePenerima(p)} /> 
                           {p.nama_penerima}
                         </label>
-                        {/* Munculkan form input QTY B/K jika dicentang */}
                         {selectedPenerima[p.id_penerima] && (
                           <div className="flex gap-4 items-center bg-gray-50 px-3 py-2 rounded-md">
                             <label className="text-sm font-bold text-gray-700 flex items-center gap-2">
@@ -322,7 +523,7 @@ const Menu = () => {
                       <td className="p-4 text-center font-bold text-gray-700">{j.qty_porsi_besar} / {j.qty_porsi_kecil}</td>
                       <td className="p-4 text-right space-x-3">
                         <button onClick={() => openGiziModal(j)} className="bg-green-100 text-green-700 hover:bg-green-200 px-3 py-1 rounded font-bold transition">Isi / Lihat Gizi</button>
-                        {canCreate && <button onClick={() => handleHapusJadwal(j.id_jadwal)} className="text-red-500 font-bold hover:underline">Hapus</button>}
+                        {canDelete && <button onClick={() => handleHapusJadwal(j.id_jadwal)} className="text-red-500 font-bold hover:underline">Hapus</button>}
                       </td>
                     </tr>
                   ))}
@@ -332,13 +533,13 @@ const Menu = () => {
           </div>
         )}
 
-        {/* MODAL GIZI */}
+        {/* MODAL GIZI (DIBIARKAN DEFAULT) */}
         {selectedGiziMenu && (
-          <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
+          <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50 backdrop-blur-sm">
             <div className="bg-white rounded-xl w-full max-w-2xl overflow-hidden shadow-2xl">
               <div className="p-4 border-b flex justify-between items-center bg-gray-50">
                 <h3 className="font-bold text-lg">Kandungan Gizi: {selectedGiziMenu.nama_menu}</h3>
-                <button onClick={() => setSelectedGiziMenu(null)} className="text-2xl font-bold text-gray-400 hover:text-red-500">&times;</button>
+                <button onClick={() => setSelectedGiziMenu(null)} className="text-2xl font-bold text-gray-400 hover:text-red-500 transition">&times;</button>
               </div>
               <div className="p-4 space-y-4">
                 {!isAkuntan && (
